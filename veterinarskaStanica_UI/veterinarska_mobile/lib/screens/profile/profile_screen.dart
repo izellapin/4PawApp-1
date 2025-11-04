@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:veterinarska_shared/veterinarska_shared.dart';
+import 'package:veterinarska_shared/utils/validation_helpers.dart';
 import '../auth/login_screen.dart';
 
 class MobileProfileScreen extends StatefulWidget {
@@ -226,6 +227,7 @@ class _MobileProfileScreenState extends State<MobileProfileScreen> {
     
     if (user == null) return;
     
+    final formKey = GlobalKey<FormState>();
     final firstNameController = TextEditingController(text: user['firstName'] ?? '');
     final lastNameController = TextEditingController(text: user['lastName'] ?? '');
     final phoneController = TextEditingController(text: user['phoneNumber'] ?? '');
@@ -236,35 +238,41 @@ class _MobileProfileScreenState extends State<MobileProfileScreen> {
       builder: (context) => AlertDialog(
         title: const Text('Uredi profil'),
         content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
+          child: Form(
+            key: formKey,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+              TextFormField(
                 controller: firstNameController,
                 decoration: const InputDecoration(
                   labelText: 'Ime',
                   border: OutlineInputBorder(),
                 ),
+                validator: (value) => ValidationHelpers.validateRequired(value, 'ime'),
               ),
               const SizedBox(height: 16),
-              TextField(
+              TextFormField(
                 controller: lastNameController,
                 decoration: const InputDecoration(
                   labelText: 'Prezime',
                   border: OutlineInputBorder(),
                 ),
+                validator: (value) => ValidationHelpers.validateRequired(value, 'prezime'),
               ),
               const SizedBox(height: 16),
-              TextField(
+              TextFormField(
                 controller: phoneController,
                 decoration: const InputDecoration(
                   labelText: 'Telefon',
                   border: OutlineInputBorder(),
+                  helperText: 'Format: +387 33 123 456 ili 061 123 456',
                 ),
                 keyboardType: TextInputType.phone,
+                validator: (value) => ValidationHelpers.validatePhone(value, required: false),
               ),
               const SizedBox(height: 16),
-              TextField(
+              TextFormField(
                 controller: addressController,
                 decoration: const InputDecoration(
                   labelText: 'Adresa',
@@ -272,7 +280,8 @@ class _MobileProfileScreenState extends State<MobileProfileScreen> {
                 ),
                 maxLines: 2,
               ),
-            ],
+              ],
+            ),
           ),
         ),
         actions: [
@@ -282,6 +291,8 @@ class _MobileProfileScreenState extends State<MobileProfileScreen> {
           ),
           ElevatedButton(
             onPressed: () async {
+              if (!formKey.currentState!.validate()) return;
+              
               final authService = Provider.of<AuthService>(context, listen: false);
               try {
                 await authService.updateProfile(
@@ -291,20 +302,22 @@ class _MobileProfileScreenState extends State<MobileProfileScreen> {
                   address: addressController.text.trim().isEmpty ? null : addressController.text.trim(),
                 );
                 if (mounted) {
-              Navigator.of(context).pop();
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Profil je ažuriran'),
-                  backgroundColor: Colors.green,
-                ),
-              );
+                  Navigator.of(context).pop();
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Profil je uspješno ažuriran. Sve promjene su sačuvane.'),
+                      backgroundColor: Colors.green,
+                      duration: Duration(seconds: 3),
+                    ),
+                  );
                 }
               } catch (e) {
                 if (mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(
-                      content: Text('Greška pri ažuriranju: $e'),
+                      content: Text('Greška pri ažuriranju profila: $e'),
                       backgroundColor: Colors.red,
+                      duration: Duration(seconds: 4),
                     ),
                   );
                 }

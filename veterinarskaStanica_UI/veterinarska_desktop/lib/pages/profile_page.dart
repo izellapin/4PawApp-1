@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:veterinarska_shared/veterinarska_shared.dart';
+import 'package:veterinarska_shared/utils/validation_helpers.dart';
 
 class ProfilePage extends StatefulWidget {
   const ProfilePage({super.key});
@@ -187,12 +188,13 @@ class _ProfilePageState extends State<ProfilePage> {
       setState(() => _isEditing = false);
       
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('✅ Profil je uspešno ažuriran'),
-            backgroundColor: Colors.green,
-          ),
-        );
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('Profil je uspješno ažuriran. Sve promjene su sačuvane.'),
+                          backgroundColor: Colors.green,
+                          duration: Duration(seconds: 3),
+                        ),
+                      );
       }
     } catch (e) {
       print('❌ Greška pri ažuriranju profila: $e');
@@ -229,12 +231,7 @@ class _ProfilePageState extends State<ProfilePage> {
                   prefixIcon: Icon(Icons.lock),
                 ),
                 obscureText: true,
-                validator: (value) {
-                  if (value == null || value.isEmpty) {
-                    return 'Unesite trenutnu lozinku';
-                  }
-                  return null;
-                },
+                validator: (value) => ValidationHelpers.validateRequired(value, 'trenutnu lozinku'),
               ),
               const SizedBox(height: 16),
               TextFormField(
@@ -244,12 +241,7 @@ class _ProfilePageState extends State<ProfilePage> {
                   prefixIcon: Icon(Icons.lock_outline),
                 ),
                 obscureText: true,
-                validator: (value) {
-                  if (value == null || value.length < 6) {
-                    return 'Lozinka mora imati najmanje 6 karaktera';
-                  }
-                  return null;
-                },
+                validator: (value) => ValidationHelpers.validatePassword(value),
               ),
               const SizedBox(height: 16),
               TextFormField(
@@ -259,12 +251,10 @@ class _ProfilePageState extends State<ProfilePage> {
                   prefixIcon: Icon(Icons.lock_outline),
                 ),
                 obscureText: true,
-                validator: (value) {
-                  if (value != newPasswordController.text) {
-                    return 'Lozinke se ne poklapaju';
-                  }
-                  return null;
-                },
+                validator: (value) => ValidationHelpers.validatePasswordConfirmation(
+                  value,
+                  newPasswordController.text,
+                ),
               ),
             ],
           ),
@@ -289,8 +279,9 @@ class _ProfilePageState extends State<ProfilePage> {
                       Navigator.of(context).pop();
                       ScaffoldMessenger.of(context).showSnackBar(
                         const SnackBar(
-                          content: Text('✅ Šifra je uspešno promenjena'),
+                          content: Text('Lozinka je uspješno promijenjena. Možete se prijaviti sa novom lozinkom.'),
                           backgroundColor: Colors.green,
+                          duration: Duration(seconds: 4),
                         ),
                       );
                     }
@@ -411,12 +402,7 @@ class _ProfilePageState extends State<ProfilePage> {
                                       prefixIcon: Icon(Icons.person),
                                     ),
                                     enabled: _isEditing,
-                                    validator: (value) {
-                                      if (value == null || value.isEmpty) {
-                                        return 'Ime je obavezno';
-                                      }
-                                      return null;
-                                    },
+                                    validator: (value) => ValidationHelpers.validateRequired(value, 'Ime'),
                                   ),
                                 ),
                                 const SizedBox(width: 16),
@@ -428,12 +414,7 @@ class _ProfilePageState extends State<ProfilePage> {
                                       prefixIcon: Icon(Icons.person),
                                     ),
                                     enabled: _isEditing,
-                                    validator: (value) {
-                                      if (value == null || value.isEmpty) {
-                                        return 'Prezime je obavezno';
-                                      }
-                                      return null;
-                                    },
+                                    validator: (value) => ValidationHelpers.validateRequired(value, 'Prezime'),
                                   ),
                                 ),
                               ],
@@ -446,24 +427,19 @@ class _ProfilePageState extends State<ProfilePage> {
                                 prefixIcon: Icon(Icons.email),
                               ),
                               enabled: _isEditing,
-                              validator: (value) {
-                                if (value == null || value.isEmpty) {
-                                  return 'Email je obavezan';
-                                }
-                                if (!value.contains('@')) {
-                                  return 'Unesite valjan e-mail';
-                                }
-                                return null;
-                              },
+                              validator: (value) => ValidationHelpers.validateEmail(value),
                             ),
                             const SizedBox(height: 16),
                             TextFormField(
                               controller: _phoneController,
-                              decoration: const InputDecoration(
+                              decoration: InputDecoration(
                                 labelText: 'Telefon',
-                                prefixIcon: Icon(Icons.phone),
+                                prefixIcon: const Icon(Icons.phone),
+                                helperText: _isEditing ? 'Format: +387 33 123 456 ili 061 123 456' : null,
                               ),
                               enabled: _isEditing,
+                              keyboardType: TextInputType.phone,
+                              validator: _isEditing ? (value) => ValidationHelpers.validatePhone(value, required: false) : null,
                             ),
                             const SizedBox(height: 16),
                             TextFormField(

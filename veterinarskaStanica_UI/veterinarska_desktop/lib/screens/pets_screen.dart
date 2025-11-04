@@ -470,7 +470,7 @@ class _PetsScreenState extends State<PetsScreen> {
                         
                         // Vlasnik sekcija
                         Container(
-                          padding: const EdgeInsets.all(16),
+                          padding: const EdgeInsets.all(12),
                           decoration: BoxDecoration(
                             color: Colors.white.withOpacity(0.7),
                             borderRadius: BorderRadius.circular(12),
@@ -481,19 +481,19 @@ class _PetsScreenState extends State<PetsScreen> {
                             children: [
                               Row(
                                 children: [
-                                  const Icon(Icons.person, color: Color(0xFF2E7D32)),
+                                  const Icon(Icons.person, color: Color(0xFF2E7D32), size: 20),
                                   const SizedBox(width: 8),
                                   const Text(
                                     'Podaci o vlasniku',
                                     style: TextStyle(
-                                      fontSize: 16,
+                                      fontSize: 14,
                                       fontWeight: FontWeight.bold,
                                       color: Color(0xFF2E7D32),
                                     ),
                                   ),
                                 ],
                               ),
-                              const SizedBox(height: 16),
+                              const SizedBox(height: 12),
                               Row(
                                 children: [
                                   Expanded(
@@ -519,7 +519,7 @@ class _PetsScreenState extends State<PetsScreen> {
                                   ),
                                 ],
                               ),
-                              const SizedBox(height: 16),
+                              const SizedBox(height: 12),
                               Row(
                                 children: [
                                   Expanded(
@@ -529,6 +529,7 @@ class _PetsScreenState extends State<PetsScreen> {
                                         labelText: 'Email vlasnika *',
                                         border: OutlineInputBorder(),
                                         prefixIcon: Icon(Icons.email),
+                                        isDense: true,
                                       ),
                                       keyboardType: TextInputType.emailAddress,
                                     ),
@@ -541,6 +542,7 @@ class _PetsScreenState extends State<PetsScreen> {
                                         labelText: 'Telefon vlasnika',
                                         border: OutlineInputBorder(),
                                         prefixIcon: Icon(Icons.phone),
+                                        isDense: true,
                                       ),
                                       keyboardType: TextInputType.phone,
                                     ),
@@ -558,9 +560,9 @@ class _PetsScreenState extends State<PetsScreen> {
                             border: OutlineInputBorder(),
                             prefixIcon: Icon(Icons.note),
                           ),
-                          maxLines: 3,
+                          maxLines: 1,
                         ),
-                        const SizedBox(height: 24),
+                        const SizedBox(height: 16),
                         
                         // Buttons
                         Row(
@@ -1209,9 +1211,9 @@ class _PetsScreenState extends State<PetsScreen> {
                             border: OutlineInputBorder(),
                             prefixIcon: Icon(Icons.note),
                           ),
-                          maxLines: 3,
+                          maxLines: 1,
                         ),
-                        const SizedBox(height: 24),
+                        const SizedBox(height: 16),
                         
                         // Buttons
                         Row(

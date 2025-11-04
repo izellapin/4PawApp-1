@@ -25,9 +25,16 @@ class AuthService extends ChangeNotifier {
       
       if (token != null && token.isNotEmpty) {
         print('Validating existing token...');
-        // Try to get current user to validate token
+        // Try to get current user to validate token with timeout
         try {
-          _currentUser = await _apiClient.getCurrentUser();
+          _currentUser = await _apiClient.getCurrentUser()
+              .timeout(
+                const Duration(seconds: 5),
+                onTimeout: () {
+                  print('Token validation timeout - backend not available');
+                  throw Exception('Connection timeout');
+                },
+              );
           _isLoggedIn = true;
           print('Token is valid, user authenticated');
         } catch (e) {
@@ -35,11 +42,13 @@ class AuthService extends ChangeNotifier {
           // Check if it's a network error (semaphore timeout, connection refused, etc.)
           if (e.toString().contains('semaphore timeout') || 
               e.toString().contains('connection') ||
-              e.toString().contains('timeout')) {
-            print('Network error during token validation - keeping user logged in');
-            // Keep user logged in for network errors, they can retry later
-            _isLoggedIn = true;
-            // Don't clear tokens for network issues
+              e.toString().contains('timeout') ||
+              e.toString().contains('SocketException') ||
+              e.toString().contains('Connection refused')) {
+            print('Network error during token validation - backend not available');
+            // Don't keep user logged in if backend is unavailable - they need to retry
+            _isLoggedIn = false;
+            await logout();
           } else {
             // Token is invalid, clear everything
             await logout();

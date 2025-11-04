@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:veterinarska_shared/veterinarska_shared.dart';
+import 'package:veterinarska_shared/utils/validation_helpers.dart';
 
 class VeterinariansScreen extends StatefulWidget {
   final UserRole userRole;
@@ -106,12 +107,7 @@ class _VeterinariansScreenState extends State<VeterinariansScreen> {
                               labelText: 'Ime *',
                               border: OutlineInputBorder(),
                             ),
-                            validator: (value) {
-                              if (value == null || value.isEmpty) {
-                                return 'Ime je obavezno';
-                              }
-                              return null;
-                            },
+                            validator: (value) => ValidationHelpers.validateRequired(value, 'ime'),
                           ),
                         ),
                         const SizedBox(width: 16),
@@ -122,12 +118,7 @@ class _VeterinariansScreenState extends State<VeterinariansScreen> {
                               labelText: 'Prezime *',
                               border: OutlineInputBorder(),
                             ),
-                            validator: (value) {
-                              if (value == null || value.isEmpty) {
-                                return 'Prezime je obavezno';
-                              }
-                              return null;
-                            },
+                            validator: (value) => ValidationHelpers.validateRequired(value, 'prezime'),
                           ),
                         ),
                       ],
@@ -140,15 +131,7 @@ class _VeterinariansScreenState extends State<VeterinariansScreen> {
                         border: OutlineInputBorder(),
                       ),
                       keyboardType: TextInputType.emailAddress,
-                      validator: (value) {
-                        if (value == null || value.isEmpty) {
-                          return 'Email je obavezan';
-                        }
-                        if (!RegExp(r'^[\w-\.\+]+@([\w-]+\.)+[\w-]{2,4}$').hasMatch(value)) {
-                          return 'Unesite valjan email';
-                        }
-                        return null;
-                      },
+                      validator: (value) => ValidationHelpers.validateEmail(value),
                     ),
                     const SizedBox(height: 16),
                     Row(
@@ -160,15 +143,7 @@ class _VeterinariansScreenState extends State<VeterinariansScreen> {
                               labelText: 'Korisničko ime *',
                               border: OutlineInputBorder(),
                             ),
-                            validator: (value) {
-                              if (value == null || value.isEmpty) {
-                                return 'Korisničko ime je obavezno';
-                              }
-                              if (value.length < 3) {
-                                return 'Korisničko ime mora imati najmanje 3 karaktera';
-                              }
-                              return null;
-                            },
+                            validator: (value) => ValidationHelpers.validateUsername(value),
                           ),
                         ),
                         const SizedBox(width: 16),
@@ -180,15 +155,7 @@ class _VeterinariansScreenState extends State<VeterinariansScreen> {
                               border: OutlineInputBorder(),
                             ),
                             obscureText: true,
-                            validator: (value) {
-                              if (value == null || value.isEmpty) {
-                                return 'Lozinka je obavezna';
-                              }
-                              if (value.length < 6) {
-                                return 'Lozinka mora imati najmanje 6 karaktera';
-                              }
-                              return null;
-                            },
+                            validator: (value) => ValidationHelpers.validatePassword(value),
                           ),
                         ),
                       ],
@@ -202,8 +169,10 @@ class _VeterinariansScreenState extends State<VeterinariansScreen> {
                             decoration: const InputDecoration(
                               labelText: 'Broj telefona',
                               border: OutlineInputBorder(),
+                              helperText: 'Format: +387 33 123 456 ili 061 123 456',
                             ),
                             keyboardType: TextInputType.phone,
+                            validator: (value) => ValidationHelpers.validatePhone(value, required: false),
                           ),
                         ),
                         const SizedBox(width: 16),
@@ -313,8 +282,9 @@ class _VeterinariansScreenState extends State<VeterinariansScreen> {
                       Navigator.of(context).pop();
                       ScaffoldMessenger.of(context).showSnackBar(
                         const SnackBar(
-                          content: Text('Veterinar je uspješno kreiran!'),
+                          content: Text('Veterinar je uspješno kreiran i dodan u sistem. Email verifikacija je automatski aktivirana.'),
                           backgroundColor: Colors.green,
+                          duration: Duration(seconds: 4),
                         ),
                       );
                       _loadVeterinarians();
@@ -355,6 +325,270 @@ class _VeterinariansScreenState extends State<VeterinariansScreen> {
     );
   }
 
+  Future<void> _showEditVeterinarianDialog(Map<String, dynamic> veterinarian) async {
+    final formKey = GlobalKey<FormState>();
+    final firstNameController = TextEditingController(text: veterinarian['firstName'] ?? '');
+    final lastNameController = TextEditingController(text: veterinarian['lastName'] ?? '');
+    final emailController = TextEditingController(text: veterinarian['email'] ?? '');
+    final usernameController = TextEditingController(text: veterinarian['username'] ?? '');
+    final passwordController = TextEditingController(); // Prazno - samo ako se menja lozinka
+    final phoneController = TextEditingController(text: veterinarian['phoneNumber'] ?? '');
+    final addressController = TextEditingController(text: veterinarian['address'] ?? '');
+    final licenseController = TextEditingController(text: veterinarian['licenseNumber'] ?? '');
+    final specializationController = TextEditingController(text: veterinarian['specialization'] ?? '');
+    final biographyController = TextEditingController(text: veterinarian['biography'] ?? '');
+    final yearsOfExperienceController = TextEditingController(
+      text: veterinarian['yearsOfExperience'] != null 
+          ? veterinarian['yearsOfExperience'].toString() 
+          : '',
+    );
+    bool _isUpdating = false;
+    final userId = veterinarian['id'] ?? veterinarian['userId'];
+
+    await showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setState) => AlertDialog(
+          title: Text('Uredi veterinara: ${veterinarian['firstName']} ${veterinarian['lastName']}'),
+          content: SizedBox(
+            width: 500,
+            child: Form(
+              key: formKey,
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(
+                          child: TextFormField(
+                            controller: firstNameController,
+                            decoration: const InputDecoration(
+                              labelText: 'Ime *',
+                              border: OutlineInputBorder(),
+                            ),
+                            validator: (value) => ValidationHelpers.validateRequired(value, 'ime'),
+                          ),
+                        ),
+                        const SizedBox(width: 16),
+                        Expanded(
+                          child: TextFormField(
+                            controller: lastNameController,
+                            decoration: const InputDecoration(
+                              labelText: 'Prezime *',
+                              border: OutlineInputBorder(),
+                            ),
+                            validator: (value) => ValidationHelpers.validateRequired(value, 'prezime'),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    TextFormField(
+                      controller: emailController,
+                      decoration: const InputDecoration(
+                        labelText: 'Email *',
+                        border: OutlineInputBorder(),
+                      ),
+                      keyboardType: TextInputType.emailAddress,
+                      validator: (value) => ValidationHelpers.validateEmail(value),
+                    ),
+                    const SizedBox(height: 16),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: TextFormField(
+                            controller: usernameController,
+                            decoration: const InputDecoration(
+                              labelText: 'Korisničko ime *',
+                              border: OutlineInputBorder(),
+                            ),
+                            validator: (value) => ValidationHelpers.validateUsername(value),
+                          ),
+                        ),
+                        const SizedBox(width: 16),
+                        Expanded(
+                          child: TextFormField(
+                            controller: passwordController,
+                            decoration: const InputDecoration(
+                              labelText: 'Nova lozinka (opcionalno)',
+                              border: OutlineInputBorder(),
+                              helperText: 'Unesite samo ako želite promijeniti lozinku',
+                            ),
+                            obscureText: true,
+                            validator: (value) {
+                              // Samo validiraj ako je uneseno
+                              if (value != null && value.isNotEmpty) {
+                                return ValidationHelpers.validatePassword(value);
+                              }
+                              return null;
+                            },
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: TextFormField(
+                            controller: phoneController,
+                            decoration: const InputDecoration(
+                              labelText: 'Broj telefona',
+                              border: OutlineInputBorder(),
+                              helperText: 'Format: +387 33 123 456 ili 061 123 456',
+                            ),
+                            keyboardType: TextInputType.phone,
+                            validator: (value) => ValidationHelpers.validatePhone(value, required: false),
+                          ),
+                        ),
+                        const SizedBox(width: 16),
+                        Expanded(
+                          child: TextFormField(
+                            controller: licenseController,
+                            decoration: const InputDecoration(
+                              labelText: 'Broj licence',
+                              border: OutlineInputBorder(),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    TextFormField(
+                      controller: specializationController,
+                      decoration: const InputDecoration(
+                        labelText: 'Specijalizacija',
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: TextFormField(
+                            controller: yearsOfExperienceController,
+                            decoration: const InputDecoration(
+                              labelText: 'Godine iskustva',
+                              border: OutlineInputBorder(),
+                            ),
+                            keyboardType: TextInputType.number,
+                          ),
+                        ),
+                        const SizedBox(width: 16),
+                        Expanded(
+                          child: TextFormField(
+                            controller: addressController,
+                            decoration: const InputDecoration(
+                              labelText: 'Adresa',
+                              border: OutlineInputBorder(),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    TextFormField(
+                      controller: biographyController,
+                      decoration: const InputDecoration(
+                        labelText: 'Biografija',
+                        border: OutlineInputBorder(),
+                      ),
+                      maxLines: 3,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: _isUpdating ? null : () => Navigator.of(context).pop(),
+              child: const Text('Otkaži'),
+            ),
+            ElevatedButton(
+              onPressed: _isUpdating ? null : () async {
+                if (formKey.currentState!.validate()) {
+                  setState(() {
+                    _isUpdating = true;
+                  });
+                  try {
+                    final updateData = <String, dynamic>{
+                      'firstName': firstNameController.text.trim(),
+                      'lastName': lastNameController.text.trim(),
+                      'email': emailController.text.trim(),
+                      'username': usernameController.text.trim(),
+                      'phoneNumber': phoneController.text.trim().isEmpty ? null : phoneController.text.trim(),
+                      'address': addressController.text.trim().isEmpty ? null : addressController.text.trim(),
+                      'licenseNumber': licenseController.text.trim().isEmpty ? null : licenseController.text.trim(),
+                      'specialization': specializationController.text.trim().isEmpty ? null : specializationController.text.trim(),
+                      'biography': biographyController.text.trim().isEmpty ? null : biographyController.text.trim(),
+                    };
+
+                    // Dodaj lozinku samo ako je unesena
+                    if (passwordController.text.isNotEmpty) {
+                      updateData['password'] = passwordController.text;
+                    }
+
+                    // Dodaj godine iskustva ako je uneseno
+                    final years = int.tryParse(yearsOfExperienceController.text);
+                    if (years != null) {
+                      updateData['yearsOfExperience'] = years;
+                    } else if (yearsOfExperienceController.text.isEmpty) {
+                      updateData['yearsOfExperience'] = null;
+                    }
+
+                    await serviceLocator.apiClient.updateUser(userId, updateData);
+
+                    if (mounted) {
+                      Navigator.of(context).pop();
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text('Veterinar ${firstNameController.text} ${lastNameController.text} je uspješno ažuriran.${passwordController.text.isNotEmpty ? ' Lozinka je promijenjena.' : ''}'),
+                          backgroundColor: Colors.green,
+                          duration: const Duration(seconds: 4),
+                        ),
+                      );
+                      _loadVeterinarians();
+                    }
+                  } catch (e) {
+                    print('❌ Error updating veterinarian: $e');
+                    if (mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text('Greška pri ažuriranju veterinara: $e'),
+                          backgroundColor: Colors.red,
+                          duration: const Duration(seconds: 4),
+                        ),
+                      );
+                    }
+                  } finally {
+                    if (mounted) {
+                      setState(() {
+                        _isUpdating = false;
+                      });
+                    }
+                  }
+                }
+              },
+              child: _isUpdating
+                  ? const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                      ),
+                    )
+                  : const Text('Sačuvaj'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Future<void> _showVeterinarianDetails(Map<String, dynamic> veterinarian) async {
     await showDialog(
       context: context,
@@ -387,6 +621,18 @@ class _VeterinariansScreenState extends State<VeterinariansScreen> {
           TextButton(
             onPressed: () => Navigator.of(context).pop(),
             child: const Text('Zatvori'),
+          ),
+          ElevatedButton.icon(
+            onPressed: () {
+              Navigator.of(context).pop();
+              _showEditVeterinarianDialog(veterinarian);
+            },
+            icon: const Icon(Icons.edit),
+            label: const Text('Uredi'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.green[700],
+              foregroundColor: Colors.white,
+            ),
           ),
         ],
       ),

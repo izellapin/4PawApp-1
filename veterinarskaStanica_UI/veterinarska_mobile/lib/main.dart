@@ -13,20 +13,40 @@ import 'screens/home/dashboard_screen.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   
+  // Add error handling for Flutter errors
+  FlutterError.onError = (FlutterErrorDetails details) {
+    FlutterError.presentError(details);
+    print('Flutter Error: ${details.exception}');
+  };
+  
   // Load environment variables (if .env file exists)
   try {
     await dotenv.load(fileName: ".env");
   } catch (e) {
     // .env file not found - use environment variables or defaults
-    print('Warning: .env file not found, using defaults or environment variables');
+    print('Warning: .env file not found: $e');
   }
   
-  // Initialize Stripe
-  Stripe.publishableKey = dotenv.env['STRIPE_PUBLISHABLE_KEY'] ?? '';
-  Stripe.merchantIdentifier = 'merchant.com.4paw.veterinary';
-  await Stripe.instance.applySettings();
+  // Initialize Stripe with error handling
+  try {
+    Stripe.publishableKey = dotenv.env['STRIPE_PUBLISHABLE_KEY'] ?? '';
+    Stripe.merchantIdentifier = 'merchant.com.4paw.veterinary';
+    await Stripe.instance.applySettings();
+    print('✅ Stripe initialized successfully');
+  } catch (e) {
+    print('⚠️ Stripe initialization error: $e');
+    // Continue without Stripe if it fails
+  }
   
-  await serviceLocator.initialize();
+  // Initialize ServiceLocator with error handling
+  try {
+    await serviceLocator.initialize();
+    print('✅ ServiceLocator initialized successfully');
+  } catch (e) {
+    print('❌ ServiceLocator initialization failed: $e');
+    // Still run the app, but it might have limited functionality
+  }
+  
   runApp(const MyApp());
 }
 

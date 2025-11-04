@@ -648,6 +648,26 @@ class ApiClient {
     }
   }
 
+  Future<Map<String, dynamic>> updateUser(int userId, Map<String, dynamic> data) async {
+    try {
+      print('Updating user $userId with data: $data');
+      final response = await dio.put('/User/$userId', data: data);
+      print('Update user response status: ${response.statusCode}');
+      if (response.statusCode == 200) {
+        return Map<String, dynamic>.from(response.data);
+      } else {
+        throw Exception('Failed to update user: ${response.statusCode}');
+      }
+    } on DioException catch (e) {
+      print('Update user error: ${e.message}');
+      print('Update user error response: ${e.response?.data}');
+      throw _handleError(e);
+    } catch (e) {
+      print('Update user unexpected error: $e');
+      rethrow;
+    }
+  }
+
   Future<Map<String, dynamic>> getCurrentVeterinarian(int userId) async {
     try {
       print('Fetching current veterinarian for user $userId...');

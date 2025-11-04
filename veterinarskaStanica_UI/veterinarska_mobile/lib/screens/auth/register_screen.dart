@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:veterinarska_shared/veterinarska_shared.dart';
+import 'package:veterinarska_shared/utils/validation_helpers.dart';
 
 class MobileRegisterScreen extends StatefulWidget {
   const MobileRegisterScreen({super.key});
@@ -38,13 +39,17 @@ class _MobileRegisterScreenState extends State<MobileRegisterScreen> {
   Future<void> _register() async {
     if (!_formKey.currentState!.validate()) return;
 
+    // Validation is already done in validator, but double-check
     if (_passwordController.text != _confirmPasswordController.text) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Lozinke se ne poklapaju'),
-          backgroundColor: Colors.red,
-        ),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Lozinke se ne poklapaju. Molimo unesite istu lozinku u oba polja.'),
+            backgroundColor: Colors.red,
+            duration: Duration(seconds: 4),
+          ),
+        );
+      }
       return;
     }
 
@@ -65,8 +70,9 @@ class _MobileRegisterScreenState extends State<MobileRegisterScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Registracija uspešna! Molimo proverite email za verifikaciju.'),
+            content: Text('Registracija je uspješno završena! Provjerite email adresu za verifikaciju računa.'),
             backgroundColor: Colors.green,
+            duration: Duration(seconds: 5),
           ),
         );
         
@@ -117,12 +123,7 @@ class _MobileRegisterScreenState extends State<MobileRegisterScreen> {
                             borderRadius: BorderRadius.circular(12),
                           ),
                         ),
-                        validator: (value) {
-                          if (value == null || value.isEmpty) {
-                            return 'Unesite ime';
-                          }
-                          return null;
-                        },
+                  validator: (value) => ValidationHelpers.validateRequired(value, 'ime'),
                       ),
                     ),
                     const SizedBox(width: 16),
@@ -136,12 +137,7 @@ class _MobileRegisterScreenState extends State<MobileRegisterScreen> {
                             borderRadius: BorderRadius.circular(12),
                           ),
                         ),
-                        validator: (value) {
-                          if (value == null || value.isEmpty) {
-                            return 'Unesite prezime';
-                          }
-                          return null;
-                        },
+                        validator: (value) => ValidationHelpers.validateRequired(value, 'prezime'),
                       ),
                     ),
                   ],
@@ -160,15 +156,7 @@ class _MobileRegisterScreenState extends State<MobileRegisterScreen> {
                       borderRadius: BorderRadius.circular(12),
                     ),
                   ),
-                  validator: (value) {
-                    if (value == null || value.isEmpty) {
-                      return 'Unesite email';
-                    }
-                    if (!value.contains('@')) {
-                      return 'Unesite valjan email';
-                    }
-                    return null;
-                  },
+                  validator: (value) => ValidationHelpers.validateEmail(value),
                 ),
                 
                 const SizedBox(height: 16),
@@ -183,12 +171,7 @@ class _MobileRegisterScreenState extends State<MobileRegisterScreen> {
                       borderRadius: BorderRadius.circular(12),
                     ),
                   ),
-                  validator: (value) {
-                    if (value == null || value.isEmpty) {
-                      return 'Unesite korisničko ime';
-                    }
-                    return null;
-                  },
+                  validator: (value) => ValidationHelpers.validateUsername(value),
                 ),
                 
                 const SizedBox(height: 16),
@@ -203,7 +186,10 @@ class _MobileRegisterScreenState extends State<MobileRegisterScreen> {
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(12),
                     ),
+                    helperText: 'Format: +387 33 123 456 ili 061 123 456',
+                    helperMaxLines: 2,
                   ),
+                  validator: (value) => ValidationHelpers.validatePhone(value, required: false),
                 ),
                 
                 const SizedBox(height: 16),
@@ -244,12 +230,8 @@ class _MobileRegisterScreenState extends State<MobileRegisterScreen> {
                     ),
                   ),
                   validator: (value) {
-                    if (value == null || value.isEmpty) {
-                      return 'Unesite lozinku';
-                    }
-                    if (value.length < 6) {
-                      return 'Lozinka mora imati najmanje 6 karaktera';
-                    }
+                    final error = ValidationHelpers.validatePassword(value);
+                    if (error != null) return error;
                     return null;
                   },
                 ),
@@ -277,12 +259,10 @@ class _MobileRegisterScreenState extends State<MobileRegisterScreen> {
                       borderRadius: BorderRadius.circular(12),
                     ),
                   ),
-                  validator: (value) {
-                    if (value == null || value.isEmpty) {
-                      return 'Potvrdite lozinku';
-                    }
-                    return null;
-                  },
+                  validator: (value) => ValidationHelpers.validatePasswordConfirmation(
+                    value,
+                    _passwordController.text,
+                  ),
                 ),
                 
                 const SizedBox(height: 24),
