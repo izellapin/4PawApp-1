@@ -36,9 +36,9 @@ Administrator ima pristup svim funkcionalnostima:
 ***** Mobile App:
 
 ### Vlasnik ljubimca (Pet Owner) 
-
-**Email:** `adil+1@edu.fit.ba`  
-**Password:** `Owner123!`
+** Login **
+**Email:** `testowner@test.com`  
+**Password:** `test123`
 
 **Kako registrovati korisnika:**
 1. Otvorite mobile aplikaciju
