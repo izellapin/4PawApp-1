@@ -1,0 +1,29 @@
+# Veterinary Clinic Docker Environment Variables
+# Rename this file to .env (remove .txt extension)
+
+# SQL Server Configuration
+SQL__PASSWORD=VetClinic2025!
+SQL__PID=Express
+SQL__DATABASE=VeterinaryClinicDB
+SQL__USER=sa
+
+# RabbitMQ Configuration
+RABBITMQ__HOST=veterinary-rabbitmq
+RABBITMQ__USERNAME=vetuser
+RABBITMQ__PASSWORD=VetRabbit2025!
+
+# JWT Configuration
+JWT__SECRET_KEY=VeterinaryClinic2025SecretKeyThatIsVeryLongAndSecure123!
+JWT__ISSUER=VeterinaryClinic
+JWT__AUDIENCE=VeterinaryClinicUsers
+
+# Email Configuration (Update with your SMTP settings)
+EMAIL__SMTP_SERVER=smtp.gmail.com
+EMAIL__SMTP_PORT=587
+EMAIL__USERNAME=your-email@gmail.com
+EMAIL__PASSWORD=your-app-password
+
+# Optional: Application Settings
+APP__NAME=4Paw Veterinary Clinic
+APP__VERSION=1.0.0
+APP__ENVIRONMENT=Production

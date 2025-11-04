@@ -1,0 +1,46 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.12.35527.113
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "veterinarskaStanica.WebAPI", "veterinarskaStanica.WebAPI\veterinarskaStanica.WebAPI.csproj", "{A6A16D42-E88A-49FE-8FED-F42F8091A631}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "eVeterinarskaStanicaServices", "eVeterinarskaStanicaServices\eVeterinarskaStanicaServices.csproj", "{A61A61D6-3981-4DEB-B770-C9E38033BC21}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "eVeterinarskaStanicaModel", "eVeterinarskaStanicaModel\eVeterinarskaStanicaModel.csproj", "{8E3713F4-776F-4683-A1BF-480D1DFAEB83}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution Items", "{F5B4F3E0-2B3A-4F3A-8F3A-1B2C3D4E5F6A}"
+	ProjectSection(SolutionItems) = preProject
+		.dockerignore = .dockerignore
+		.gitignore = .gitignore
+		docker-compose.yml = docker-compose.yml
+		docker-compose.override.yml = docker-compose.override.yml
+		docker-compose.prod.yml = docker-compose.prod.yml
+		docker-commands.md = docker-commands.md
+		Makefile = Makefile
+		README.md = README.md
+	EndProjectSection
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{A6A16D42-E88A-49FE-8FED-F42F8091A631}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{A6A16D42-E88A-49FE-8FED-F42F8091A631}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{A6A16D42-E88A-49FE-8FED-F42F8091A631}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{A6A16D42-E88A-49FE-8FED-F42F8091A631}.Release|Any CPU.Build.0 = Release|Any CPU
+		{A61A61D6-3981-4DEB-B770-C9E38033BC21}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{A61A61D6-3981-4DEB-B770-C9E38033BC21}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{A61A61D6-3981-4DEB-B770-C9E38033BC21}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{A61A61D6-3981-4DEB-B770-C9E38033BC21}.Release|Any CPU.Build.0 = Release|Any CPU
+		{8E3713F4-776F-4683-A1BF-480D1DFAEB83}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{8E3713F4-776F-4683-A1BF-480D1DFAEB83}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{8E3713F4-776F-4683-A1BF-480D1DFAEB83}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{8E3713F4-776F-4683-A1BF-480D1DFAEB83}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+EndGlobal

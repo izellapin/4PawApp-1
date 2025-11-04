@@ -1,0 +1,31 @@
+{
+    "folders": [
+        {
+            "name": "eVeterinarskaStanicaModel",
+            "path": "./eVeterinarskaStanicaModel"
+        },
+        {
+            "name": "eVeterinarskaStanicaServices", 
+            "path": "./eVeterinarskaStanicaServices"
+        },
+        {
+            "name": "veterinarskaStanica.WebAPI",
+            "path": "./veterinarskaStanica.WebAPI"
+        }
+    ],
+    "settings": {
+        "files.exclude": {
+            "**/bin": true,
+            "**/obj": true,
+            "**/.vs": true
+        }
+    },
+    "extensions": {
+        "recommendations": [
+            "ms-dotnettools.csharp",
+            "ms-dotnettools.vscode-dotnet-runtime",
+            "ms-vscode.vscode-json"
+        ]
+    }
+}
+

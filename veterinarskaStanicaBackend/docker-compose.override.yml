@@ -1,0 +1,30 @@
+# Override for development environment
+# Updated for Veterinary Clinic system
+
+services:
+  veterinary-sql:
+    environment:
+      MSSQL_PID: "Express"
+    ports:
+      - "1433:1433"
+    volumes:
+      - veterinary_sql_data_dev:/var/opt/mssql
+
+  veterinary-api:
+    environment:
+      ASPNETCORE_ENVIRONMENT: "Development"
+      ASPNETCORE_URLS: "http://+:5160"
+      ASPNETCORE_LOGGING__LOGLEVEL__DEFAULT: "Information"
+      ASPNETCORE_LOGGING__LOGLEVEL__MICROSOFT: "Warning"
+    ports:
+      - "5160:5160"
+    volumes:
+      - ${HOME}/.microsoft/usersecrets:/home/dotnet/.microsoft/usersecrets:ro
+      - ${HOME}/.nuget/packages:/home/dotnet/.nuget/packages:ro
+      - ${APPDATA}/Microsoft/UserSecrets:/root/.microsoft/usersecrets:ro
+      - ./veterinarskaStanica.WebAPI:/app/source:ro
+      - veterinary_logs_dev:/app/logs
+
+volumes:
+  veterinary_sql_data_dev:
+  veterinary_logs_dev:

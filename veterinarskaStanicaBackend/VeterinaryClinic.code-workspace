@@ -1,0 +1,119 @@
+{
+    "folders": [
+        {
+            "name": "🏥 VETERINARY CLINIC",
+            "path": "."
+        },
+        {
+            "name": "📊 eVeterinarskaStanicaModel",
+            "path": "./eVeterinarskaStanicaModel"
+        },
+        {
+            "name": "⚙️ eVeterinarskaStanicaServices", 
+            "path": "./eVeterinarskaStanicaServices"
+        },
+        {
+            "name": "🌐 veterinarskaStanica.WebAPI",
+            "path": "./veterinarskaStanica.WebAPI"
+        },
+        {
+            "name": "🐳 Docker & DevOps",
+            "path": ".",
+            "settings": {
+                "files.include": {
+                    "docker-compose*.yml": true,
+                    "Dockerfile": true,
+                    ".dockerignore": true,
+                    "Makefile": true,
+                    "*.md": true
+                }
+            }
+        }
+    ],
+    "settings": {
+        "files.exclude": {
+            "**/bin": true,
+            "**/obj": true,
+            "**/.vs": true,
+            "**/node_modules": true,
+            "**/.git": true
+        },
+        "dotnetAcquisition.enableTelemetry": false,
+        "omnisharp.enableEditorConfigSupport": true,
+        "omnisharp.enableImportCompletion": true
+    },
+    "extensions": {
+        "recommendations": [
+            "ms-dotnettools.csharp",
+            "ms-dotnettools.vscode-dotnet-runtime",
+            "ms-vscode.vscode-json",
+            "ms-vscode-remote.remote-containers",
+            "ms-azuretools.vscode-docker"
+        ]
+    },
+    "launch": {
+        "version": "0.2.0",
+        "configurations": [
+            {
+                "name": "Launch Veterinary API",
+                "type": "coreclr",
+                "request": "launch",
+                "preLaunchTask": "build",
+                "program": "${workspaceFolder}/veterinarskaStanica.WebAPI/bin/Debug/net8.0/veterinarskaStanica.WebAPI.dll",
+                "args": [],
+                "cwd": "${workspaceFolder}/veterinarskaStanica.WebAPI",
+                "stopAtEntry": false,
+                "serverReadyAction": {
+                    "action": "openExternally",
+                    "pattern": "\\bNow listening on:\\s+(https?://\\S+)"
+                },
+                "env": {
+                    "ASPNETCORE_ENVIRONMENT": "Development"
+                },
+                "sourceFileMap": {
+                    "/Views": "${workspaceFolder}/Views"
+                }
+            }
+        ]
+    },
+    "tasks": {
+        "version": "2.0.0",
+        "tasks": [
+            {
+                "label": "build",
+                "command": "dotnet",
+                "type": "process",
+                "args": [
+                    "build",
+                    "${workspaceFolder}/veterinarskaStanica.sln",
+                    "/property:GenerateFullPaths=true",
+                    "/consoleloggerparameters:NoSummary"
+                ],
+                "problemMatcher": "$msCompile"
+            },
+            {
+                "label": "docker-build",
+                "type": "shell",
+                "command": "docker",
+                "args": ["compose", "build"],
+                "group": "build",
+                "presentation": {
+                    "reveal": "always",
+                    "panel": "new"
+                }
+            },
+            {
+                "label": "docker-up",
+                "type": "shell", 
+                "command": "docker",
+                "args": ["compose", "up", "--build"],
+                "group": "build",
+                "presentation": {
+                    "reveal": "always",
+                    "panel": "new"
+                }
+            }
+        ]
+    }
+}
+

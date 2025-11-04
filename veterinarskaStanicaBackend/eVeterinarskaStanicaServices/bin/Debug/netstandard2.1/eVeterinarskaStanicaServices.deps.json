@@ -1,0 +1,40 @@
+{
+  "runtimeTarget": {
+    "name": ".NETStandard,Version=v2.1/",
+    "signature": ""
+  },
+  "compilationOptions": {},
+  "targets": {
+    ".NETStandard,Version=v2.1": {},
+    ".NETStandard,Version=v2.1/": {
+      "eVeterinarskaStanicaServices/1.0.0": {
+        "dependencies": {
+          "eVeterinarskaStanicaModel": "1.0.0"
+        },
+        "runtime": {
+          "eVeterinarskaStanicaServices.dll": {}
+        }
+      },
+      "eVeterinarskaStanicaModel/1.0.0": {
+        "runtime": {
+          "eVeterinarskaStanicaModel.dll": {
+            "assemblyVersion": "1.0.0",
+            "fileVersion": "1.0.0.0"
+          }
+        }
+      }
+    }
+  },
+  "libraries": {
+    "eVeterinarskaStanicaServices/1.0.0": {
+      "type": "project",
+      "serviceable": false,
+      "sha512": ""
+    },
+    "eVeterinarskaStanicaModel/1.0.0": {
+      "type": "project",
+      "serviceable": false,
+      "sha512": ""
+    }
+  }
+}

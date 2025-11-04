@@ -1,0 +1,13 @@
+C:\Users\User\source\repos\veterinarskaStanica\eVeterinarskaStanicaServices\bin\Debug\netstandard2.1\eVeterinarskaStanicaServices.deps.json
+C:\Users\User\source\repos\veterinarskaStanica\eVeterinarskaStanicaServices\bin\Debug\netstandard2.1\eVeterinarskaStanicaServices.dll
+C:\Users\User\source\repos\veterinarskaStanica\eVeterinarskaStanicaServices\bin\Debug\netstandard2.1\eVeterinarskaStanicaServices.pdb
+C:\Users\User\source\repos\veterinarskaStanica\eVeterinarskaStanicaServices\bin\Debug\netstandard2.1\eVeterinarskaStanicaModel.dll
+C:\Users\User\source\repos\veterinarskaStanica\eVeterinarskaStanicaServices\bin\Debug\netstandard2.1\eVeterinarskaStanicaModel.pdb
+C:\Users\User\source\repos\veterinarskaStanica\eVeterinarskaStanicaServices\obj\Debug\netstandard2.1\eVeterinarskaStanicaServices.csproj.AssemblyReference.cache
+C:\Users\User\source\repos\veterinarskaStanica\eVeterinarskaStanicaServices\obj\Debug\netstandard2.1\eVeterinarskaStanicaServices.GeneratedMSBuildEditorConfig.editorconfig
+C:\Users\User\source\repos\veterinarskaStanica\eVeterinarskaStanicaServices\obj\Debug\netstandard2.1\eVeterinarskaStanicaServices.AssemblyInfoInputs.cache
+C:\Users\User\source\repos\veterinarskaStanica\eVeterinarskaStanicaServices\obj\Debug\netstandard2.1\eVeterinarskaStanicaServices.AssemblyInfo.cs
+C:\Users\User\source\repos\veterinarskaStanica\eVeterinarskaStanicaServices\obj\Debug\netstandard2.1\eVeterinarskaStanicaServices.csproj.CoreCompileInputs.cache
+C:\Users\User\source\repos\veterinarskaStanica\eVeterinarskaStanicaServices\obj\Debug\netstandard2.1\eVeterin.CDE53FD3.Up2Date
+C:\Users\User\source\repos\veterinarskaStanica\eVeterinarskaStanicaServices\obj\Debug\netstandard2.1\eVeterinarskaStanicaServices.dll
+C:\Users\User\source\repos\veterinarskaStanica\eVeterinarskaStanicaServices\obj\Debug\netstandard2.1\eVeterinarskaStanicaServices.pdb

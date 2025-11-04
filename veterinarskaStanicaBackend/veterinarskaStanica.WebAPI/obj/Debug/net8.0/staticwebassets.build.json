@@ -1,0 +1,12 @@
+{
+  "Version": 1,
+  "Hash": "OLP/SUGGBjq9uGmnOaY8gIDBfx73/4PwFn4ZL4ZwieU=",
+  "Source": "veterinarskaStanica.WebAPI",
+  "BasePath": "_content/veterinarskaStanica.WebAPI",
+  "Mode": "Default",
+  "ManifestType": "Build",
+  "ReferencedProjectsConfiguration": [],
+  "DiscoveryPatterns": [],
+  "Assets": [],
+  "Endpoints": []
+}

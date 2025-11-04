@@ -1,0 +1,87 @@
+### Authentication API Test Requests
+
+### 1. Login as Admin (Desktop)
+POST http://localhost:8080/api/auth/login
+Content-Type: application/json
+
+{
+  "email": "admin@veterinary.com",
+  "password": "Admin123!",
+  "clientType": "Desktop"
+}
+
+### 2. Login as Veterinarian (Desktop)
+POST http://localhost:8080/api/auth/login
+Content-Type: application/json
+
+{
+  "email": "vet@veterinary.com",
+  "password": "Vet123!",
+  "clientType": "Desktop"
+}
+
+### 3. Login as Pet Owner (Mobile)
+POST http://localhost:8080/api/auth/login
+Content-Type: application/json
+
+{
+  "email": "petowner@email.com",
+  "password": "Mobile123!",
+  "clientType": "Mobile"
+}
+
+### 4. Get Current User Info (Replace TOKEN with actual JWT token from login response)
+GET http://localhost:8080/api/auth/me
+Authorization: Bearer YOUR_JWT_TOKEN_HERE
+
+### 5. Validate Token
+POST http://localhost:8080/api/auth/validate
+Content-Type: application/json
+
+"YOUR_JWT_TOKEN_HERE"
+
+### 6. Change Password (Replace TOKEN with actual JWT token)
+POST http://localhost:8080/api/auth/change-password
+Authorization: Bearer YOUR_JWT_TOKEN_HERE
+Content-Type: application/json
+
+{
+  "currentPassword": "Admin123!",
+  "newPassword": "NewAdmin123!"
+}
+
+### 7. Logout (Replace TOKEN and REFRESH_TOKEN with actual tokens)
+POST http://localhost:8080/api/auth/logout
+Authorization: Bearer YOUR_JWT_TOKEN_HERE
+Content-Type: application/json
+
+"YOUR_REFRESH_TOKEN_HERE"
+
+### 8. Test Protected Endpoint - Get All Users (Admin/Staff Only)
+GET http://localhost:8080/api/user
+Authorization: Bearer YOUR_JWT_TOKEN_HERE
+
+### 9. Test Protected Endpoint - Create User (Admin/Receptionist Only)
+POST http://localhost:8080/api/user
+Authorization: Bearer YOUR_JWT_TOKEN_HERE
+Content-Type: application/json
+
+{
+  "firstName": "Test",
+  "lastName": "User",
+  "email": "testuser@email.com",
+  "username": "testuser",
+  "password": "Test123!",
+  "role": 1,
+  "phoneNumber": "+1234567890"
+}
+
+### 10. Test Invalid Login
+POST http://localhost:8080/api/auth/login
+Content-Type: application/json
+
+{
+  "email": "invalid@email.com",
+  "password": "wrongpassword",
+  "clientType": "Desktop"
+}

@@ -1,0 +1,44 @@
+### Get all users
+GET {{baseUrl}}/api/User
+Accept: application/json
+
+### Get user by ID
+GET {{baseUrl}}/api/User/1
+Accept: application/json
+
+### Create a new user
+POST {{baseUrl}}/api/User
+Content-Type: application/json
+
+{
+  "firstName": "John",
+  "lastName": "Doe",
+  "email": "john.doe@example.com",
+  "username": "johndoe",
+  "password": "password123",
+  "phoneNumber": "+1234567890",
+  "address": "123 Main St, City, State",
+  "role": "User"
+}
+
+### Update user
+PUT {{baseUrl}}/api/User/1
+Content-Type: application/json
+
+{
+  "firstName": "John Updated",
+  "lastName": "Doe Updated",
+  "phoneNumber": "+0987654321"
+}
+
+### Activate user
+PATCH {{baseUrl}}/api/User/1/activate
+
+### Deactivate user
+PATCH {{baseUrl}}/api/User/1/deactivate
+
+### Delete user
+DELETE {{baseUrl}}/api/User/1
+
+### Variables
+@baseUrl = https://localhost:7001
