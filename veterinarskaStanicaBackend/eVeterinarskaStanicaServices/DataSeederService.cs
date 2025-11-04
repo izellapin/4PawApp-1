@@ -411,6 +411,7 @@ namespace eVeterinarskaStanicaServices
                         PasswordSalt = Convert.ToBase64String(salt),
                         Role = UserRole.PetOwner,
                         IsActive = true,
+                        IsEmailVerified = true,
                         DateCreated = DateTime.UtcNow
                     };
                     _context.Users.Add(testOwner);
@@ -420,6 +421,10 @@ namespace eVeterinarskaStanicaServices
                 else
                 {
                     _logger.LogInformation($"Test owner already exists with ID: {testOwner.Id}");
+                    // Update existing user to ensure IsEmailVerified is true
+                    testOwner.IsEmailVerified = true;
+                    await _context.SaveChangesAsync();
+                    _logger.LogInformation($"Force updated test owner IsEmailVerified to true");
                 }
 
                 // Create a test pet
