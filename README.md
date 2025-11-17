@@ -9,7 +9,7 @@ Kompletan sistem za upravljanje veterinarskom stanicom sa desktop i mobile aplik
 
 ### Administrator
 
-**Email:** `izellapin@gmail.com`  
+**Email:** `izellapin@gmail.com ili **Username:** admin  
 **Password:** `Admin123!`
 
 Administrator ima pristup svim funkcionalnostima:
