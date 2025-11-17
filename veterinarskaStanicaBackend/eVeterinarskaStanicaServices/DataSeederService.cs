@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
@@ -34,6 +35,7 @@ namespace eVeterinarskaStanicaServices
                 await SeedAdminUserAsync();
                 await SeedCategoriesAsync();
                 await SeedServicesAsync();
+                await SeedServiceSpeciesPricesAsync(); // Eksplicitno pozovi seeding cijena
                 
                 // Seed test data for appointments and pets
                 await SeedTestDataAsync();
@@ -230,6 +232,70 @@ namespace eVeterinarskaStanicaServices
             }
         }
 
+        public async Task SeedServiceSpeciesPricesAsync()
+        {
+            try
+            {
+                _logger.LogInformation("Starting ServiceSpeciesPrices seeding...");
+
+                // Uzmi sve usluge
+                var services = await _context.Services.ToListAsync();
+                if (services.Count == 0)
+                {
+                    _logger.LogWarning("No services found. Skipping ServiceSpeciesPrices seeding.");
+                    return;
+                }
+
+                var species = new[] { "Pas", "Mačka", "Ptica", "Zec", "Glodar" };
+                var addedCount = 0;
+                var updatedCount = 0;
+
+                foreach (var service in services)
+                {
+                    foreach (var speciesName in species)
+                    {
+                        // Provjeri da li već postoji
+                        var existing = await _context.ServiceSpeciesPrices
+                            .FirstOrDefaultAsync(ssp => ssp.ServiceId == service.Id && ssp.Species == speciesName);
+
+                        if (existing != null)
+                        {
+                            // Ažuriraj postojeći ako je cijena drugačija
+                            decimal newPrice = GetPriceForServiceAndSpecies(service.Name, speciesName, service.Price);
+                            if (existing.Price != newPrice)
+                            {
+                                existing.Price = newPrice;
+                                existing.DateModified = DateTime.UtcNow;
+                                updatedCount++;
+                            }
+                        }
+                        else
+                        {
+                            // Dodaj novi
+                            decimal price = GetPriceForServiceAndSpecies(service.Name, speciesName, service.Price);
+                            _context.ServiceSpeciesPrices.Add(new ServiceSpeciesPrice
+                            {
+                                ServiceId = service.Id,
+                                Species = speciesName,
+                                Price = price,
+                                DateCreated = DateTime.UtcNow
+                            });
+                            addedCount++;
+                        }
+                    }
+                }
+
+                await _context.SaveChangesAsync();
+
+                _logger.LogInformation($"ServiceSpeciesPrices seeding completed. Added: {addedCount}, Updated: {updatedCount}, Total: {await _context.ServiceSpeciesPrices.CountAsync()}");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error seeding ServiceSpeciesPrices");
+                throw;
+            }
+        }
+
         public async Task SeedServicesAsync()
         {
             try
@@ -367,16 +433,92 @@ namespace eVeterinarskaStanicaServices
                     }
                 };
 
-                _context.Services.AddRange(services);
-                await _context.SaveChangesAsync();
+                // Provjeri da li već postoje usluge
+                var existingServices = await _context.Services.ToListAsync();
+                
+                if (existingServices.Count == 0)
+                {
+                    _context.Services.AddRange(services);
+                    await _context.SaveChangesAsync();
+                    existingServices = services.ToList();
+                }
+                else
+                {
+                    // Ako već postoje usluge, koristi postojeće
+                    _logger.LogInformation($"Found {existingServices.Count} existing services, using them for species prices");
+                }
 
-                _logger.LogInformation($"Seeded {services.Length} services successfully");
+                // Cijene će se dodati u SeedServiceSpeciesPricesAsync metodi
+
+                _logger.LogInformation($"Service seeding completed. Total services: {existingServices.Count}");
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error seeding services");
                 throw;
             }
+        }
+
+        private decimal GetPriceForServiceAndSpecies(string serviceName, string speciesName, decimal defaultPrice)
+        {
+            return serviceName switch
+            {
+                "Godišnji pregled" => speciesName switch
+                {
+                    "Pas" => 75.00m,
+                    "Mačka" => 70.00m,
+                    "Ptica" => 60.00m,
+                    "Zec" => 65.00m,
+                    "Glodar" => 55.00m,
+                    _ => defaultPrice
+                },
+                "Vakcinacija" => speciesName switch
+                {
+                    "Pas" => 120.00m,
+                    "Mačka" => 110.00m,
+                    "Ptica" => 100.00m,
+                    "Zec" => 90.00m,
+                    "Glodar" => 85.00m,
+                    _ => defaultPrice
+                },
+                "Hitna pomoć" => speciesName switch
+                {
+                    "Pas" => 150.00m,
+                    "Mačka" => 140.00m,
+                    "Ptica" => 130.00m,
+                    "Zec" => 125.00m,
+                    "Glodar" => 120.00m,
+                    _ => defaultPrice
+                },
+                "Sterilizacija" => speciesName switch
+                {
+                    "Pas" => 300.00m,
+                    "Mačka" => 280.00m,
+                    "Ptica" => 250.00m,
+                    "Zec" => 200.00m,
+                    "Glodar" => 180.00m,
+                    _ => defaultPrice
+                },
+                "Čišćenje zuba" => speciesName switch
+                {
+                    "Pas" => 200.00m,
+                    "Mačka" => 180.00m,
+                    "Ptica" => 150.00m,
+                    "Zec" => 120.00m,
+                    "Glodar" => 100.00m,
+                    _ => defaultPrice
+                },
+                "Kompletno čišćenje" => speciesName switch
+                {
+                    "Pas" => 80.00m,
+                    "Mačka" => 75.00m,
+                    "Ptica" => 70.00m,
+                    "Zec" => 60.00m,
+                    "Glodar" => 55.00m,
+                    _ => defaultPrice
+                },
+                _ => defaultPrice
+            };
         }
 
         public async Task SeedTestDataAsync()

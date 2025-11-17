@@ -68,9 +68,9 @@ class AuthService extends ChangeNotifier {
     }
   }
 
-  Future<void> login(String email, String password) async {
+  Future<void> login(String emailOrUsername, String password, {String? clientType}) async {
     try {
-      final authResponse = await _apiClient.login(email, password);
+      final authResponse = await _apiClient.login(emailOrUsername, password, clientType: clientType ?? 'Mobile');
       
       // Store tokens
       final prefs = await SharedPreferences.getInstance();

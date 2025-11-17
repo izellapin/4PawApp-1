@@ -24,7 +24,7 @@ class _AppointmentScreenState extends State<AppointmentScreen> {
   String? _error;
   DateTime? _selectedDate;
   Appointment? _selectedAppointment;
-  DateTime? _filterDate;
+  String? _filterServiceName; // Filter po nazivu usluge (Service.Name)
   int? _currentUserId; // Koristi se za automatsko popunjavanje ID veterinara
   bool _isRefreshing = false; // Za refresh button
 
@@ -57,13 +57,23 @@ class _AppointmentScreenState extends State<AppointmentScreen> {
       }
 
       debugPrint('✅ Appointments loaded: ${appointments.length} appointments');
+      
+      // Debug: prikaži serviceName za sve termine
+      for (var appointment in appointments) {
+        if (appointment.serviceName != null && appointment.serviceName!.isNotEmpty) {
+          debugPrint('📋 Appointment ${appointment.id}: serviceName = "${appointment.serviceName}"');
+        } else {
+          debugPrint('⚠️ Appointment ${appointment.id}: serviceName is NULL or empty');
+        }
+      }
+      
       setState(() {
         _appointments = appointments;
         _isLoading = false;
       });
 
-      if (_filterDate != null) {
-        _filterAppointmentsByDate(_filterDate);
+      if (_filterServiceName != null) {
+        _filterAppointmentsByServiceName(_filterServiceName);
       } else {
         setState(() {
           _filteredAppointments = appointments;
@@ -98,8 +108,8 @@ class _AppointmentScreenState extends State<AppointmentScreen> {
           _isLoading = false;
         });
 
-        if (_filterDate != null) {
-          _filterAppointmentsByDate(_filterDate);
+        if (_filterServiceName != null) {
+          _filterAppointmentsByServiceName(_filterServiceName);
         } else {
           setState(() {
             _filteredAppointments = appointments;
@@ -220,17 +230,36 @@ class _AppointmentScreenState extends State<AppointmentScreen> {
     });
   }
 
-  void _filterAppointmentsByDate(DateTime? date) {
+  void _filterAppointmentsByServiceName(String? serviceName) {
     setState(() {
-      _filterDate = date;
-      if (date == null) {
+      _filterServiceName = serviceName;
+      if (serviceName == null || serviceName.isEmpty) {
         _filteredAppointments = _appointments;
       } else {
+        debugPrint('🔍 Filtering by service name: "$serviceName"');
+        debugPrint('📋 Total appointments: ${_appointments.length}');
+        
         _filteredAppointments = _appointments.where((appointment) {
-          return appointment.appointmentDate.year == date.year &&
-                 appointment.appointmentDate.month == date.month &&
-                 appointment.appointmentDate.day == date.day;
+          final appServiceName = appointment.serviceName?.trim();
+          final filterName = serviceName.trim();
+          
+          if (appServiceName == null || appServiceName.isEmpty) {
+            debugPrint('⚠️ Appointment ${appointment.id} has no serviceName');
+            return false;
+          }
+          
+          // Tačno poklapanje (case-insensitive)
+          final matches = appServiceName.toLowerCase() == filterName.toLowerCase();
+          
+          if (matches) {
+            debugPrint('✅ Match found: Appointment ${appointment.id} - "${appointment.serviceName}" matches "$serviceName"');
+            debugPrint('   Date: ${appointment.appointmentDate}, Pet: ${appointment.petName}');
+          }
+          
+          return matches;
         }).toList();
+        
+        debugPrint('✅ Filtered appointments: ${_filteredAppointments.length}');
       }
     });
   }
@@ -1128,6 +1157,184 @@ class _AppointmentScreenState extends State<AppointmentScreen> {
     );
   }
 
+  Widget _buildPetAutocomplete({
+    required TextEditingController petIdController,
+    required List<Pet> pets,
+    Function(Pet)? onPetSelected,
+  }) {
+    return Autocomplete<Pet>(
+      displayStringForOption: (Pet pet) => _formatPetDisplay(pet),
+      optionsBuilder: (TextEditingValue textEditingValue) {
+        if (textEditingValue.text.isEmpty) {
+          return const Iterable<Pet>.empty();
+        }
+        
+        final query = textEditingValue.text.toLowerCase();
+        return pets.where((pet) {
+          final nameMatch = pet.name.toLowerCase().contains(query);
+          final speciesMatch = pet.species.toLowerCase().contains(query);
+          final breedMatch = pet.breed?.toLowerCase().contains(query) ?? false;
+          final ownerMatch = pet.ownerName?.toLowerCase().contains(query) ?? false;
+          
+          return nameMatch || speciesMatch || breedMatch || ownerMatch;
+        });
+      },
+      onSelected: (Pet pet) {
+        petIdController.text = pet.id.toString();
+        onPetSelected?.call(pet);
+      },
+      fieldViewBuilder: (
+        BuildContext context,
+        TextEditingController textController,
+        FocusNode focusNode,
+        VoidCallback onFieldSubmitted,
+      ) {
+        return TextFormField(
+          controller: textController,
+          focusNode: focusNode,
+          decoration: InputDecoration(
+            labelText: 'Pacijent *',
+            hintText: 'Pretražite po imenu, vrsti, rasi ili vlasniku...',
+            prefixIcon: const Icon(Icons.pets, color: Color(0xFF2E7D32)),
+            suffixIcon: textController.text.isNotEmpty
+                ? IconButton(
+                    icon: const Icon(Icons.clear, size: 20),
+                    onPressed: () {
+                      textController.clear();
+                      petIdController.clear();
+                    },
+                  )
+                : null,
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+            filled: true,
+            fillColor: Colors.white.withOpacity(0.8),
+          ),
+          validator: (value) {
+            if (petIdController.text.isEmpty) {
+              return 'Molimo izaberite pacijenta';
+            }
+            return null;
+          },
+        );
+      },
+      optionsViewBuilder: (
+        BuildContext context,
+        AutocompleteOnSelected<Pet> onSelected,
+        Iterable<Pet> options,
+      ) {
+        return Align(
+          alignment: Alignment.topLeft,
+          child: Material(
+            elevation: 4.0,
+            borderRadius: BorderRadius.circular(12),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxHeight: 300),
+              child: ListView.builder(
+                padding: EdgeInsets.zero,
+                shrinkWrap: true,
+                itemCount: options.length,
+                itemBuilder: (BuildContext context, int index) {
+                  final pet = options.elementAt(index);
+                  return InkWell(
+                    onTap: () => onSelected(pet),
+                    child: Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        border: Border(
+                          bottom: BorderSide(
+                            color: Colors.grey.withOpacity(0.2),
+                            width: 1,
+                          ),
+                        ),
+                      ),
+                      child: Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF2E7D32).withOpacity(0.1),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: const Icon(
+                              Icons.pets,
+                              color: Color(0xFF2E7D32),
+                              size: 20,
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  pet.name,
+                                  style: const TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w600,
+                                    color: Color(0xFF2E7D32),
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                Row(
+                                  children: [
+                                    Text(
+                                      pet.species,
+                                      style: TextStyle(
+                                        fontSize: 14,
+                                        color: Colors.grey[700],
+                                      ),
+                                    ),
+                                    if (pet.breed != null && pet.breed!.isNotEmpty) ...[
+                                      Text(
+                                        ' • ${pet.breed}',
+                                        style: TextStyle(
+                                          fontSize: 14,
+                                          color: Colors.grey[700],
+                                        ),
+                                      ),
+                                    ],
+                                  ],
+                                ),
+                                if (pet.ownerName != null && pet.ownerName!.isNotEmpty) ...[
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    'Vlasnik: ${pet.ownerName}',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      color: Colors.grey[600],
+                                      fontStyle: FontStyle.italic,
+                                    ),
+                                  ),
+                                ],
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  String _formatPetDisplay(Pet pet) {
+    final parts = <String>[pet.name, pet.species];
+    if (pet.breed != null && pet.breed!.isNotEmpty) {
+      parts.add(pet.breed!);
+    }
+    if (pet.ownerName != null && pet.ownerName!.isNotEmpty) {
+      parts.add('(${pet.ownerName})');
+    }
+    return parts.join(' • ');
+  }
+
   void _showAddAppointmentDialog() {
     // Refresh pets so newly added patients appear in the dropdown
     _loadPets();
@@ -1150,10 +1357,102 @@ class _AppointmentScreenState extends State<AppointmentScreen> {
     }
     final serviceIdController = TextEditingController();
     
+    // Varijabla za zapamćenu vrstu ljubimca
+    String? selectedPetSpecies;
+    
+    // Lista usluga filtrirana po vrsti (sa cijenama za tu vrstu)
+    // Inicijalno prazna - učitava se tek kada se odabere pacijent
+    List<Map<String, dynamic>> filteredServices = [];
+    
+    // Loading state za učitavanje usluga
+    bool isLoadingServices = false;
+    
     // Tip termina i status se podrazumijevano tretiraju kao "zakazan pregled"
     DateTime? selectedDate;
     TimeOfDay? selectedStartTime;
     TimeOfDay? selectedEndTime;
+
+    // Metoda za učitavanje usluga sa cijenama za određenu vrstu
+    Future<void> loadServicesForSpecies(String? species, StateSetter setDialogState) async {
+      if (species == null || species.isEmpty) {
+        // Ako nema vrste, ne prikazuj usluge (mora se odabrati pacijent prvo)
+        debugPrint('⚠️ [loadServicesForSpecies] No species provided, clearing services list');
+        setDialogState(() {
+          filteredServices = []; // Prazna lista - ne prikazuj usluge dok se ne odabere pacijent
+          isLoadingServices = false;
+        });
+        return;
+      }
+      
+      debugPrint('🔍 [loadServicesForSpecies] Loading services for species: "$species"');
+      
+      setDialogState(() {
+        isLoadingServices = true;
+      });
+      
+      try {
+        final apiClient = serviceLocator.apiClient;
+        final services = await apiClient.getServices(species: species);
+        
+        debugPrint('✅ [loadServicesForSpecies] Received ${services.length} services for species "$species"');
+        if (services.isNotEmpty) {
+          debugPrint('💰 [loadServicesForSpecies] First service: ${services[0]['name']} = ${services[0]['price']} KM');
+        }
+        
+        setDialogState(() {
+          filteredServices = List<Map<String, dynamic>>.from(services);
+          isLoadingServices = false;
+          // Resetuj odabranu uslugu ako je promijenjena lista
+          if (serviceIdController.text.isNotEmpty) {
+            final currentServiceId = int.tryParse(serviceIdController.text);
+            final updatedService = filteredServices.firstWhere(
+              (s) => s['id'] == currentServiceId,
+              orElse: () => {},
+            );
+            if (updatedService.isNotEmpty) {
+              // Ažuriraj cijenu za odabranu uslugu
+              estimatedCostController.text = updatedService['price']?.toString() ?? '';
+              debugPrint('💰 [loadServicesForSpecies] Updated price for selected service: ${updatedService['price']}');
+            } else {
+              serviceIdController.clear();
+              estimatedCostController.clear();
+            }
+          }
+        });
+      } catch (e) {
+        debugPrint('❌ [loadServicesForSpecies] Error loading services for species "$species": $e');
+        // Ako greška, prazna lista (ne koristi stare podatke iz _services)
+        setDialogState(() {
+          filteredServices = [];
+          isLoadingServices = false;
+        });
+      }
+    }
+
+    // Metoda za ažuriranje cijene na osnovu usluge i vrste
+    Future<void> updatePriceForServiceAndSpecies(int? serviceId, String? species) async {
+      if (serviceId == null || species == null) {
+        return;
+      }
+      
+      try {
+        final apiClient = serviceLocator.apiClient;
+        final service = await apiClient.getService(serviceId, species: species);
+        if (service != null && service['price'] != null) {
+          estimatedCostController.text = service['price'].toString();
+        }
+      } catch (e) {
+        debugPrint('Error fetching service price for species: $e');
+        // Fallback na cijenu iz filtrirane liste
+        final selected = filteredServices.firstWhere(
+          (s) => s['id'] == serviceId,
+          orElse: () => {},
+        );
+        if (selected.isNotEmpty && selected['price'] != null) {
+          estimatedCostController.text = selected['price'].toString();
+        }
+      }
+    }
 
     showDialog(
       context: context,
@@ -1281,32 +1580,18 @@ class _AppointmentScreenState extends State<AppointmentScreen> {
                             // Uklonjeno: Tip termina i Status (podrazumijevano: zakazan)
                             const SizedBox(height: 16),
                             
-                            // Pet (dropdown) and Veterinarian ID
+                            // Pet (searchable autocomplete) and Veterinarian ID
                             Row(
                               children: [
                                 Expanded(
-                                  child: DropdownButtonFormField<int>(
-                                    value: petIdController.text.isNotEmpty
-                                        ? int.tryParse(petIdController.text)
-                                        : null,
-                                    items: _pets.map((pet) {
-                                      return DropdownMenuItem<int>(
-                                        value: pet.id,
-                                        child: Text('${pet.name} (${pet.species})'),
-                                      );
-                                    }).toList(),
-                                    onChanged: (value) {
-                                      petIdController.text = value?.toString() ?? '';
-                                    },
-                                    decoration: const InputDecoration(
-                                      labelText: 'Pacijent',
-                                      prefixIcon: Icon(Icons.pets, color: Color(0xFF2E7D32)),
-                                    ),
-                                    validator: (value) {
-                                      if (value == null) {
-                                        return 'Molimo izaberite pacijenta';
-                                      }
-                                      return null;
+                                  child: _buildPetAutocomplete(
+                                    petIdController: petIdController,
+                                    pets: _pets,
+                                    onPetSelected: (Pet pet) async {
+                                      debugPrint('🐾 [onPetSelected] Selected pet: ${pet.name}, Species: "${pet.species}"');
+                                      selectedPetSpecies = pet.species; // Zapamti vrstu
+                                      // Učitaj usluge sa cijenama za tu vrstu
+                                      await loadServicesForSpecies(pet.species, setState);
                                     },
                                   ),
                                 ),
@@ -1372,30 +1657,70 @@ class _AppointmentScreenState extends State<AppointmentScreen> {
                             Row(
                               children: [
                                 Expanded(
-                                  child: DropdownButtonFormField<int>(
-                                    value: serviceIdController.text.isNotEmpty
-                                        ? int.tryParse(serviceIdController.text)
-                                        : null,
-                                    items: _services.map((s) {
-                                      return DropdownMenuItem<int>(
-                                        value: s['id'] as int?,
-                                        child: Text(s['name']?.toString() ?? 'Usluga'),
-                                      );
-                                    }).toList(),
-                                    onChanged: (value) {
-                                      serviceIdController.text = value?.toString() ?? '';
-                                      final selected = _services.firstWhere(
-                                        (s) => s['id'] == value,
-                                        orElse: () => {},
-                                      );
-                                      final price = (selected['price']?.toString()) ?? '';
-                                      estimatedCostController.text = price;
-                                    },
-                                    decoration: const InputDecoration(
-                                      labelText: 'Usluga',
-                                      prefixIcon: Icon(Icons.medical_information, color: Color(0xFF2E7D32)),
-                                    ),
-                                  ),
+                                  child: isLoadingServices
+                                      ? const Center(
+                                          child: Padding(
+                                            padding: EdgeInsets.all(16.0),
+                                            child: CircularProgressIndicator(),
+                                          ),
+                                        )
+                                      : DropdownButtonFormField<int>(
+                                          value: serviceIdController.text.isNotEmpty
+                                              ? int.tryParse(serviceIdController.text)
+                                              : null,
+                                          items: filteredServices.map((s) {
+                                            final serviceName = s['name']?.toString() ?? 'Usluga';
+                                            final servicePrice = s['price']?.toString() ?? '0';
+                                            return DropdownMenuItem<int>(
+                                              value: s['id'] as int?,
+                                              child: ConstrainedBox(
+                                                constraints: const BoxConstraints(maxHeight: 50),
+                                                child: Column(
+                                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                                  mainAxisSize: MainAxisSize.min,
+                                                  mainAxisAlignment: MainAxisAlignment.center,
+                                                  children: [
+                                                    Text(
+                                                      serviceName,
+                                                      style: const TextStyle(
+                                                        fontWeight: FontWeight.bold,
+                                                        fontSize: 14,
+                                                      ),
+                                                      maxLines: 1,
+                                                      overflow: TextOverflow.ellipsis,
+                                                    ),
+                                                    Text(
+                                                      '$servicePrice KM',
+                                                      style: TextStyle(
+                                                        color: Colors.grey[600],
+                                                        fontSize: 11,
+                                                      ),
+                                                    ),
+                                                  ],
+                                                ),
+                                              ),
+                                            );
+                                          }).toList(),
+                                          onChanged: (value) {
+                                            serviceIdController.text = value?.toString() ?? '';
+                                            // Pronađi odabranu uslugu u filtriranoj listi i postavi cijenu
+                                            final selected = filteredServices.firstWhere(
+                                              (s) => s['id'] == value,
+                                              orElse: () => {},
+                                            );
+                                            if (selected.isNotEmpty && selected['price'] != null) {
+                                              estimatedCostController.text = selected['price'].toString();
+                                            } else {
+                                              estimatedCostController.clear();
+                                            }
+                                          },
+                                          decoration: InputDecoration(
+                                            labelText: selectedPetSpecies != null 
+                                                ? 'Usluga (cijene za ${selectedPetSpecies})'
+                                                : 'Usluga',
+                                            prefixIcon: const Icon(Icons.medical_information, color: Color(0xFF2E7D32)),
+                                          ),
+                                        ),
                                 ),
                                 const SizedBox(width: 16),
                                 Expanded(
@@ -1650,45 +1975,55 @@ class _AppointmentScreenState extends State<AppointmentScreen> {
           Row(
             children: [
               Expanded(
-                child: InkWell(
-                  onTap: () async {
-                    final date = await showDatePicker(
-                      context: context,
-                      initialDate: _filterDate ?? DateTime.now(),
-                      firstDate: DateTime(2020),
-                      lastDate: DateTime(2030),
-                    );
-                    if (date != null) {
-                      _filterAppointmentsByDate(date);
-                    }
-                  },
-                  child: Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
+                child: DropdownButtonFormField<String?>(
+                  value: _filterServiceName,
+                  decoration: InputDecoration(
+                    labelText: 'Filtriraj po usluzi',
+                    border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: Colors.grey.withOpacity(0.3)),
                     ),
-                    child: Row(
-                      children: [
-                        const Icon(Icons.filter_list, color: Color(0xFF2E7D32)),
-                        const SizedBox(width: 8),
-                        Text(
-                          _filterDate != null 
-                              ? 'Filtrirano: ${_filterDate!.day}.${_filterDate!.month}.${_filterDate!.year}'
-                              : 'Filtriraj po datumu',
-                          style: const TextStyle(fontSize: 14),
-                        ),
-                        const Spacer(),
-                        if (_filterDate != null)
-                          IconButton(
-                            onPressed: () => _filterAppointmentsByDate(null),
-                            icon: const Icon(Icons.clear, size: 20),
-                            tooltip: 'Ukloni filter',
-                          ),
-                      ],
-                    ),
+                    prefixIcon: const Icon(Icons.filter_list, color: Color(0xFF2E7D32)),
                   ),
+                  items: [
+                    const DropdownMenuItem<String?>(
+                      value: null,
+                      child: Text('Sve usluge'),
+                    ),
+                    // Prikaži usluge koje stvarno postoje u terminima
+                    ...() {
+                      // Prvo uzmi usluge iz termina
+                      final serviceNamesFromAppointments = _appointments
+                          .where((appointment) => appointment.serviceName != null && appointment.serviceName!.isNotEmpty)
+                          .map((appointment) => appointment.serviceName!.trim())
+                          .toSet()
+                          .toList();
+                      
+                      // Dodaj i usluge iz baze koje možda nisu još korišćene
+                      final allServiceNames = <String>{};
+                      allServiceNames.addAll(serviceNamesFromAppointments);
+                      
+                      // Dodaj usluge iz baze
+                      for (var service in _services) {
+                        if (service['name'] != null && service['name'].toString().isNotEmpty) {
+                          allServiceNames.add(service['name'].toString().trim());
+                        }
+                      }
+                      
+                      final sortedNames = allServiceNames.toList()..sort();
+                      
+                      debugPrint('📋 Available service names for filter: $sortedNames');
+                      
+                      return sortedNames.map((serviceName) {
+                        return DropdownMenuItem<String?>(
+                          value: serviceName,
+                          child: Text(serviceName),
+                        );
+                      });
+                    }(),
+                  ],
+                  onChanged: (value) {
+                    _filterAppointmentsByServiceName(value);
+                  },
                 ),
               ),
               const SizedBox(width: 8),
@@ -1718,7 +2053,7 @@ class _AppointmentScreenState extends State<AppointmentScreen> {
                     userRole: widget.userRole,
                     onDateSelected: _onDateSelected,
                     onAppointmentSelected: _onAppointmentSelected,
-                    initialSelectedDay: _selectedDate ?? _filterDate,
+                    initialSelectedDay: _selectedDate,
                   ),
                 );
               },

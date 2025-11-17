@@ -67,3 +67,4 @@ C:\Users\User\Desktop\RS2-4PawApplication-main\veterinarskaStanicaBackend\eVeter
 C:\Users\User\Desktop\RS2-4PawApplication-main\veterinarskaStanicaBackend\eVeterinarskaStanicaServices\obj\Debug\net8.0\eVeterinarskaStanicaServices.pdb
 C:\Users\User\Desktop\RS2-4PawApplication-main\veterinarskaStanicaBackend\eVeterinarskaStanicaServices\obj\Debug\net8.0\eVeterinarskaStanicaServices.genruntimeconfig.cache
 C:\Users\User\Desktop\RS2-4PawApplication-main\veterinarskaStanicaBackend\eVeterinarskaStanicaServices\obj\Debug\net8.0\ref\eVeterinarskaStanicaServices.dll
+C:\Users\User\Desktop\RS2-4PawApplication-main\veterinarskaStanicaBackend\eVeterinarskaStanicaServices\obj\Debug\net8.0\eVeterinarskaStanicaServices.sourcelink.json

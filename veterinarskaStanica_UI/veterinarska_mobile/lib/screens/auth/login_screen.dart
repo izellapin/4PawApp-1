@@ -129,23 +129,21 @@ class _MobileLoginScreenState extends State<MobileLoginScreen> {
                 
                 const SizedBox(height: 60),
                 
-                // Email field
+                // Email or Username field
                 TextFormField(
                   controller: _emailController,
-                  keyboardType: TextInputType.emailAddress,
+                  keyboardType: TextInputType.text,
                   decoration: InputDecoration(
-                    labelText: 'Email',
-                    prefixIcon: const Icon(Icons.email),
+                    labelText: 'Email ili korisničko ime',
+                    hintText: 'Email ili username',
+                    prefixIcon: const Icon(Icons.person),
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(12),
                     ),
                   ),
                   validator: (value) {
                     if (value == null || value.isEmpty) {
-                      return 'Unesite email';
-                    }
-                    if (!value.contains('@')) {
-                      return 'Unesite valjan email';
+                      return 'Unesite email ili korisničko ime';
                     }
                     return null;
                   },

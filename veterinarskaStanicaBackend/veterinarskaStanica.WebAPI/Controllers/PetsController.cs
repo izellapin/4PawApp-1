@@ -39,52 +39,53 @@ namespace veterinarskaStanica.WebAPI.Controllers
 
             var petsQuery = _context.Pets
                 .Include(p => p.PetOwner)
-                .Where(p => p.Status == PetStatus.Active);
+                .Where(p => !p.IsDeleted); // Ne prikazuj obrisane pacijente (soft delete)
 
             if (userRole == UserRole.Admin)
             {
-                // Admin vidi sve pacijente
+                // Admin vidi sve pacijente (aktivne i neaktivne, ali ne obrisane)
                 var pets = await petsQuery
                     .OrderBy(p => p.Name)
                     .ToListAsync();
+                _logger.LogInformation($"🔍 Admin sees {pets.Count} pets (excluding deleted)");
                 return Ok(pets);
             }
             else if (userRole == UserRole.Veterinarian)
             {
                 // Get current user ID
                 var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-                if (string.IsNullOrEmpty(userIdClaim) || !int.TryParse(userIdClaim, out int veterinarianId))
+                if (string.IsNullOrEmpty(userIdClaim) || !int.TryParse(userIdClaim, out int currentUserId))
                 {
                     return Unauthorized();
                 }
 
-                _logger.LogInformation($"🔍 Veterinarian ID: {veterinarianId} requesting pets");
+                _logger.LogInformation($"🔍 Filtering pets for Veterinarian ID: {currentUserId}");
 
-                // Veterinar vidi pacijente koji su imali termine sa njim ILI koje je on dodao
-                var petIdsFromAppointments = await _context.Appointments
-                    .Where(a => a.VeterinarianId == veterinarianId && a.Pet != null && a.Pet.Status == PetStatus.Active)
-                    .Select(a => a.PetId)
-                    .Distinct()
+                // Prvo učitaj sve pacijente u memoriju, pa filtriraj
+                var allPets = await petsQuery
+                    .Include(p => p.Appointments) // Učitaj appointments za filtriranje
                     .ToListAsync();
 
-                // Veterinar vidi pacijente koje je dodao ILI s kojima ima termine
-                var petIdsFromCreated = await _context.Pets
-                    .Where(p => p.Status == PetStatus.Active && p.CreatedBy == veterinarianId)
-                    .Select(p => p.Id)
-                    .ToListAsync();
+                _logger.LogInformation($"🔍 Total pets in database (excluding deleted): {allPets.Count}");
 
-                // Kombinuj oba skupa
-                var allPetIds = petIdsFromAppointments.Union(petIdsFromCreated).ToList();
-
-                _logger.LogInformation($"🔍 Found {petIdsFromAppointments.Count} pets from appointments and {petIdsFromCreated.Count} pets created by veterinarian {veterinarianId}");
-                _logger.LogInformation($"🔍 Total unique pet IDs for veterinarian {veterinarianId}: [{string.Join(", ", allPetIds)}]");
-
-                var pets = await petsQuery
-                    .Where(p => allPetIds.Contains(p.Id))
+                // Filtriraj pacijente koje je veterinar dodao ILI sa kojima ima appointments
+                var pets = allPets
+                    .Where(p => p.CreatedBy == currentUserId || 
+                               p.Appointments.Any(a => a.VeterinarianId == currentUserId))
                     .OrderBy(p => p.Name)
-                    .ToListAsync();
+                    .ToList();
 
-                _logger.LogInformation($"🔍 Returning {pets.Count} pets for veterinarian {veterinarianId}");
+                // Debug: Log detalje o filtriranju
+                var createdByCount = allPets.Count(p => p.CreatedBy == currentUserId);
+                var withAppointmentsCount = allPets.Count(p => p.Appointments.Any(a => a.VeterinarianId == currentUserId));
+                var createdByIds = allPets.Where(p => p.CreatedBy == currentUserId).Select(p => p.Id).ToList();
+                var withAppointmentIds = allPets.Where(p => p.Appointments.Any(a => a.VeterinarianId == currentUserId)).Select(p => p.Id).ToList();
+                
+                _logger.LogInformation($"🔍 Veterinarian {currentUserId} filtering results:");
+                _logger.LogInformation($"   - Pets created by this vet: {createdByCount} (IDs: {string.Join(", ", createdByIds)})");
+                _logger.LogInformation($"   - Pets with appointments: {withAppointmentsCount} (IDs: {string.Join(", ", withAppointmentIds)})");
+                _logger.LogInformation($"   - Total pets visible: {pets.Count} (IDs: {string.Join(", ", pets.Select(p => p.Id))})");
+                
                 return Ok(pets);
             }
 
@@ -104,12 +105,12 @@ namespace veterinarskaStanica.WebAPI.Controllers
             }
 
             var petsQuery = _context.Pets
-                .Include(p => p.PetOwner)
-                .Where(p => p.Status == PetStatus.Active);
+                .Include(p => p.PetOwner);
+                // Uklonjen filter za Status == Active - sada se prikazuju svi pacijenti (aktivni i neaktivni)
 
             if (userRole == UserRole.Admin)
             {
-                // Admin vidi sve pacijente
+                // Admin vidi sve pacijente (aktivne i neaktivne)
                 var pets = await petsQuery
                     .OrderBy(p => p.Name)
                     .ToListAsync();
@@ -117,7 +118,7 @@ namespace veterinarskaStanica.WebAPI.Controllers
             }
             else if (userRole == UserRole.Veterinarian)
             {
-                // Veterinar vidi sve pacijente (bez filtriranja)
+                // Veterinar vidi sve pacijente (aktivne i neaktivne)
                 var pets = await petsQuery
                     .OrderBy(p => p.Name)
                     .ToListAsync();
@@ -277,48 +278,65 @@ namespace veterinarskaStanica.WebAPI.Controllers
         [RoleRequired(UserRole.Admin, UserRole.Veterinarian)]
         public async Task<ActionResult<Pet>> UpdatePet(int id, PetUpdateRequest request)
         {
+            _logger.LogInformation("UpdatePet called for pet ID: {PetId}", id);
+            _logger.LogInformation("User identity authenticated: {IsAuthenticated}", User.Identity?.IsAuthenticated);
+            _logger.LogInformation("User identity name: {Name}", User.Identity?.Name);
+            
             if (!ModelState.IsValid)
             {
+                _logger.LogWarning("ModelState is invalid for UpdatePet request");
                 return BadRequest(ModelState);
             }
 
             var pet = await _context.Pets.FindAsync(id);
             if (pet == null)
             {
+                _logger.LogWarning("Pet with ID {PetId} not found", id);
                 return NotFound();
             }
 
             // Get current user role and ID
             var roleClaim = User.FindFirst(ClaimTypes.Role)?.Value;
-            if (string.IsNullOrEmpty(roleClaim) || !Enum.TryParse<UserRole>(roleClaim, out var userRole))
+            _logger.LogInformation("Role claim from token: {RoleClaim}", roleClaim);
+            
+            if (string.IsNullOrEmpty(roleClaim))
             {
-                return Unauthorized();
+                _logger.LogWarning("Role claim is null or empty");
+                return Unauthorized("Role claim is missing");
             }
+
+            if (!Enum.TryParse<UserRole>(roleClaim, ignoreCase: true, out var userRole))
+            {
+                _logger.LogWarning("Failed to parse role claim '{RoleClaim}' as UserRole enum", roleClaim);
+                return Unauthorized($"Invalid role claim: {roleClaim}");
+            }
+
+            _logger.LogInformation("Parsed user role: {UserRole}", userRole);
 
             var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
             if (string.IsNullOrEmpty(userIdClaim) || !int.TryParse(userIdClaim, out int userId))
             {
-                return Unauthorized();
+                _logger.LogWarning("User ID claim is missing or invalid");
+                return Unauthorized("User ID claim is missing");
             }
+
+            _logger.LogInformation("User ID: {UserId}", userId);
 
             // Check permissions
             if (userRole == UserRole.Admin)
             {
+                _logger.LogInformation("Admin user updating pet - allowed");
                 // Admin može da ažurira sve pacijente
             }
             else if (userRole == UserRole.Veterinarian)
             {
-                // Veterinar može da ažurira samo pacijente koji su imali termine sa njim
-                var hasAppointment = await _context.Appointments
-                    .AnyAsync(a => a.PetId == pet.Id && a.VeterinarianId == userId);
-                
-                if (!hasAppointment)
-                {
-                    return Forbid();
-                }
+                _logger.LogInformation("Veterinarian user updating pet - allowed");
+                // Veterinar može da ažurira sve pacijente (kao administrator sistema)
+                // Nema dodatnih provjera - veterinari imaju punu kontrolu nad pacijentima
             }
             else
             {
+                _logger.LogWarning("User role {UserRole} is not authorized to update pets", userRole);
                 return Forbid();
             }
 
@@ -390,12 +408,14 @@ namespace veterinarskaStanica.WebAPI.Controllers
                 return Forbid();
             }
 
-            // Soft delete - označava kao neaktivan
+            // Soft delete - označi kao obrisan (nevidljiv na listi)
+            pet.IsDeleted = true;
             pet.Status = PetStatus.Inactive;
             pet.DateModified = DateTime.UtcNow;
 
             await _context.SaveChangesAsync();
 
+            _logger.LogInformation($"🗑️ Pet {id} soft deleted (IsDeleted=true) by user {userId}");
             return NoContent();
         }
 
@@ -422,12 +442,14 @@ namespace veterinarskaStanica.WebAPI.Controllers
                 return Forbid();
             }
 
-            // Soft delete - označava kao neaktivan
+            // Soft delete - označi kao obrisan (nevidljiv na listi)
+            pet.IsDeleted = true;
             pet.Status = PetStatus.Inactive;
             pet.DateModified = DateTime.UtcNow;
 
             await _context.SaveChangesAsync();
 
+            _logger.LogInformation($"🗑️ Pet {id} soft deleted (IsDeleted=true) by owner {userId}");
             return NoContent();
         }
 

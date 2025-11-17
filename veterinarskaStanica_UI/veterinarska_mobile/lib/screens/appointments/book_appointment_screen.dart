@@ -31,7 +31,7 @@ class _BookAppointmentScreenState extends State<BookAppointmentScreen> {
   void initState() {
     super.initState();
     _loadUserPets();
-    _loadServices();
+    // Ne učitavaj usluge dok se ne odabere ljubimac - cijene su specifične za vrstu
     _loadVeterinarians();
   }
 
@@ -61,18 +61,53 @@ class _BookAppointmentScreenState extends State<BookAppointmentScreen> {
     }
   }
 
-  Future<void> _loadServices() async {
+  Future<void> _loadServices({String? species}) async {
     try {
       final apiClient = serviceLocator.apiClient;
-      final services = await apiClient.getServices();
+      print('🔍 Loading services for species: "$species"');
+      final services = await apiClient.getServices(species: species);
+      
+      print('📋 Loaded ${services.length} services for species: $species');
+      if (services.isNotEmpty) {
+        print('💰 First service: ${services[0]['name']} - Price: ${services[0]['price']}');
+      } else {
+        print('⚠️ No services found for species: $species');
+        print('💡 Tip: Provjerite da li su cijene seed-ane u bazi podataka');
+      }
       
       if (mounted) {
         setState(() {
           _services = services;
+          // Resetuj odabranu uslugu ako je promijenjena lista
+          if (_selectedService != null) {
+            final updatedService = services.firstWhere(
+              (s) => s['id'] == _selectedService!['id'],
+              orElse: () => {},
+            );
+            if (updatedService.isNotEmpty) {
+              _selectedService = updatedService;
+            } else {
+              _selectedService = null;
+            }
+          }
         });
       }
     } catch (e) {
-      print('Error loading services: $e');
+      print('❌ Error loading services: $e');
+      print('❌ Stack trace: ${StackTrace.current}');
+      if (mounted) {
+        setState(() {
+          _services = [];
+        });
+        // Prikaži poruku korisniku
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Greška pri učitavanju usluga: $e'),
+            backgroundColor: Colors.orange,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
     }
   }
 
@@ -197,6 +232,12 @@ class _BookAppointmentScreenState extends State<BookAppointmentScreen> {
         widget.onAppointmentBooked?.call();
         
         // Ask user if they want to pay now
+        final servicePrice = _selectedService!['price'];
+        final priceText = servicePrice != null 
+            ? (servicePrice is num 
+                ? '${servicePrice.toStringAsFixed(servicePrice % 1 == 0 ? 0 : 2)} KM'
+                : '$servicePrice KM')
+            : '0 KM';
         final shouldPay = await showDialog<bool>(
           context: context,
           builder: (BuildContext context) {
@@ -206,7 +247,7 @@ class _BookAppointmentScreenState extends State<BookAppointmentScreen> {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Text(
-                    'Termin je uspešno zakazan.\nCena usluge: ${_selectedService!['price']?.toString() ?? '0'} KM',
+                    'Termin je uspešno zakazan.\nCena usluge: $priceText',
                     textAlign: TextAlign.center,
                   ),
                   const SizedBox(height: 16),
@@ -350,15 +391,31 @@ class _BookAppointmentScreenState extends State<BookAppointmentScreen> {
                         value: pet,
                         child: Text('${pet.name} (${pet.species})'),
                       )).toList(),
-                      onChanged: (pet) => setState(() => _selectedPet = pet),
+                      onChanged: (pet) {
+                        setState(() {
+                          _selectedPet = pet;
+                          _selectedService = null; // Resetuj uslugu kada se promijeni ljubimac
+                        });
+                        // Učitaj usluge sa cijenama za odabranu vrstu
+                        if (pet != null) {
+                          _loadServices(species: pet.species);
+                        } else {
+                          // Resetuj listu usluga ako nije odabran ljubimac
+                          setState(() {
+                            _services = [];
+                          });
+                        }
+                      },
                     ),
                     
                     const SizedBox(height: 16),
                     
                     // Odabir usluge
-                    const Text(
-                      'Usluga *',
-                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                    Text(
+                      _selectedPet != null
+                          ? 'Usluga * (cijene za ${_selectedPet!.species})'
+                          : 'Usluga * (odaberite ljubimca za cijene)',
+                      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                     ),
                     const SizedBox(height: 8),
                     DropdownButtonFormField<Map<String, dynamic>>(
@@ -367,30 +424,46 @@ class _BookAppointmentScreenState extends State<BookAppointmentScreen> {
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(12),
                         ),
-                        hintText: 'Odaberite uslugu',
+                        hintText: _selectedPet != null 
+                            ? 'Odaberite uslugu'
+                            : 'Prvo odaberite ljubimca',
                         prefixIcon: const Icon(Icons.medical_services),
                       ),
-                      items: _services.map((service) => DropdownMenuItem(
-                        value: service,
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Text(
-                              service['name'] ?? 'Nepoznata usluga',
-                              style: const TextStyle(fontWeight: FontWeight.bold),
-                            ),
-                            Text(
-                              '${service['price']?.toString() ?? '0'} KM',
-                              style: TextStyle(
-                                color: Colors.grey[600],
-                                fontSize: 12,
+                      items: _services.map((service) {
+                        final price = service['price'];
+                        final priceText = price != null 
+                            ? (price is num 
+                                ? '${price.toStringAsFixed(price % 1 == 0 ? 0 : 2)} KM'
+                                : '$price KM')
+                            : '0 KM';
+                        return DropdownMenuItem(
+                          value: service,
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(
+                                service['name'] ?? 'Nepoznata usluga',
+                                style: const TextStyle(fontWeight: FontWeight.bold),
                               ),
-                            ),
-                          ],
-                        ),
-                      )).toList(),
-                      onChanged: (service) => setState(() => _selectedService = service),
+                              Text(
+                                priceText,
+                                style: TextStyle(
+                                  color: Colors.grey[600],
+                                  fontSize: 12,
+                                ),
+                              ),
+                            ],
+                          ),
+                        );
+                      }).toList(),
+                      onChanged: (service) {
+                        if (_selectedPet != null) {
+                          setState(() {
+                            _selectedService = service;
+                          });
+                        }
+                      },
                     ),
                     
                     const SizedBox(height: 16),

@@ -4,7 +4,7 @@ import 'package:flutter_stripe/flutter_stripe.dart';
 import 'package:http/http.dart' as http;
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:veterinarska_shared/veterinarska_shared.dart';
-import '../../main.dart';
+import '../../main.dart' show globalStripePublishableKey, globalStripeSecretKey;
 
 class StripePaymentScreen extends StatefulWidget {
   final Appointment appointment;
@@ -706,33 +706,68 @@ class _StripePaymentScreenState extends State<StripePaymentScreen> {
   }
 
   Future<void> _processStripePayment(Map<String, dynamic> formData) async {
+    print('💳 [PAYMENT] Starting payment process...');
+    print('💳 [PAYMENT] Appointment ID: ${widget.appointment.id}');
+    print('💳 [PAYMENT] Amount: ${widget.amount} KM');
+    print('💳 [PAYMENT] Form data: $formData');
+    
     setState(() => _isLoading = true);
 
     try {
+      print('💳 [PAYMENT] Step 1: Initializing payment sheet...');
       await initPaymentSheet(formData);
-      await Stripe.instance.presentPaymentSheet();
+      print('✅ [PAYMENT] Payment sheet initialized successfully');
 
+      print('💳 [PAYMENT] Step 2: Presenting payment sheet to user...');
+      try {
+        await Stripe.instance.presentPaymentSheet();
+        print('✅ [PAYMENT] Payment sheet completed successfully');
+      } on StripeException catch (e) {
+        print('❌ [PAYMENT] Stripe exception occurred');
+        print('❌ [PAYMENT] Stripe error code: ${e.error.code}');
+        print('❌ [PAYMENT] Stripe error message: ${e.error.message}');
+        print('❌ [PAYMENT] Stripe error type: ${e.error.type}');
+        print('❌ [PAYMENT] Stripe error decline code: ${e.error.declineCode}');
+        rethrow;
+      } catch (e) {
+        print('❌ [PAYMENT] Unexpected error presenting payment sheet: $e');
+        print('❌ [PAYMENT] Error type: ${e.runtimeType}');
+        rethrow;
+      }
+
+      print('💳 [PAYMENT] Step 3: Marking appointment as paid in backend...');
       try {
         final apiClient = serviceLocator.apiClient;
+        final transactionId = 'pi_stripe_${widget.appointment.id}_${DateTime.now().millisecondsSinceEpoch}';
+        print('💳 [PAYMENT] Transaction ID: $transactionId');
+        
         await apiClient.markAppointmentAsPaid(
           widget.appointment.id,
           paymentMethod: 'Stripe',
-          transactionId: 'pi_stripe_${widget.appointment.id}_${DateTime.now().millisecondsSinceEpoch}',
+          transactionId: transactionId,
         );
+        print('✅ [PAYMENT] Appointment marked as paid successfully');
       } catch (e) {
-        print('⚠️ Failed to mark appointment as paid: $e');
+        print('❌ [PAYMENT] Failed to mark appointment as paid: $e');
+        print('❌ [PAYMENT] Error type: ${e.runtimeType}');
+        print('❌ [PAYMENT] Stack trace: ${StackTrace.current}');
+        rethrow; // Re-throw da korisnik vidi grešku
       }
 
+      print('💳 [PAYMENT] Step 4: Updating UI state...');
       setState(() {
         _paymentCompleted = true;
         _generatedAppointmentCode = widget.appointment.appointmentNumber;
         _generatedAppointmentId = widget.appointment.id;
         _paidAppointment = widget.appointment;
       });
+      print('✅ [PAYMENT] UI state updated');
 
       // Offer rating after successful payment
+      print('💳 [PAYMENT] Step 5: Showing rating dialog...');
       await _showRateVeterinarianDialog();
 
+      print('✅ [PAYMENT] Payment process completed successfully!');
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Plaćanje uspješno!'),
@@ -740,14 +775,21 @@ class _StripePaymentScreenState extends State<StripePaymentScreen> {
         ),
       );
     } catch (e) {
+      print('❌ [PAYMENT] Payment process failed!');
+      print('❌ [PAYMENT] Error: $e');
+      print('❌ [PAYMENT] Error type: ${e.runtimeType}');
+      print('❌ [PAYMENT] Stack trace: ${StackTrace.current}');
+      
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Plaćanje neuspješno: $e'),
           backgroundColor: Colors.red,
+          duration: const Duration(seconds: 5),
         ),
       );
     } finally {
       setState(() => _isLoading = false);
+      print('💳 [PAYMENT] Payment process finished (loading state reset)');
     }
   }
 
@@ -832,9 +874,150 @@ class _StripePaymentScreenState extends State<StripePaymentScreen> {
   }
 
   Future<void> initPaymentSheet(Map<String, dynamic> formData) async {
+    print('💳 [PAYMENT SHEET] Initializing payment sheet...');
     try {
+      // Provjeri da li je Stripe inicijalizovan
+      print('💳 [PAYMENT SHEET] Step 0: Accessing dotenv...');
+      String? publishableKey;
+      
+      // Koristi globalnu varijablu umjesto direktnog pristupa dotenv.env
+      // Ovo izbjegava NotInitializedError i FileNotFoundError
+      try {
+        // Prvo pokušaj koristiti globalnu varijablu iz main.dart
+        if (globalStripePublishableKey != null && globalStripePublishableKey!.isNotEmpty) {
+          publishableKey = globalStripePublishableKey;
+          print('💳 [PAYMENT SHEET] Using global Stripe publishable key from main.dart');
+          print('💳 [PAYMENT SHEET] STRIPE_PUBLISHABLE_KEY value: ${publishableKey!.substring(0, 20)}...');
+        } else {
+          // Fallback na dotenv ako globalna varijabla nije postavljena
+          print('⚠️ [PAYMENT SHEET] Global key not found, trying dotenv...');
+          
+          // Pokušaj pristupiti dotenv samo ako je već inicijalizovan
+          // Ne pokušavaj učitati .env fajl ponovo jer to ne radi na Androidu
+          if (dotenv.isInitialized) {
+            publishableKey = dotenv.env['STRIPE_PUBLISHABLE_KEY'];
+            print('💳 [PAYMENT SHEET] Successfully accessed dotenv.env (already initialized)');
+            if (publishableKey != null) {
+              print('💳 [PAYMENT SHEET] STRIPE_PUBLISHABLE_KEY value: ${publishableKey.substring(0, 20)}...');
+            }
+          } else {
+            print('❌ [PAYMENT SHEET] dotenv is not initialized and cannot load .env file at runtime');
+            print('💡 [PAYMENT SHEET] This usually means .env file was not loaded in main.dart');
+            print('💡 [PAYMENT SHEET] Please check that .env file exists and is loaded in main() function');
+            throw Exception('STRIPE_PUBLISHABLE_KEY is not available. Global variable is null and dotenv is not initialized.');
+          }
+        }
+      } catch (e) {
+        print('❌ [PAYMENT SHEET] Error accessing Stripe keys: $e');
+        print('❌ [PAYMENT SHEET] Error type: ${e.runtimeType}');
+        
+        // Ako je FileNotFoundError, to znači da .env fajl nije dostupan
+        if (e.toString().contains('FileNotFoundError') || e.runtimeType.toString().contains('FileNotFound')) {
+          print('💡 [PAYMENT SHEET] FileNotFoundError - .env file cannot be loaded at runtime');
+          print('💡 [PAYMENT SHEET] Trying to use global variable as fallback...');
+          publishableKey = globalStripePublishableKey;
+          if (publishableKey == null || publishableKey.isEmpty) {
+            throw Exception('STRIPE_PUBLISHABLE_KEY is not available. Please restart the app to load .env file.');
+          }
+          print('✅ [PAYMENT SHEET] Using global key after FileNotFoundError');
+        } 
+        // Ako je NotInitializedError, pokušaj koristiti globalnu varijablu
+        else if (e.toString().contains('NotInitializedError') || e.runtimeType.toString().contains('NotInitialized')) {
+          print('💡 [PAYMENT SHEET] NotInitializedError detected - trying global variable...');
+          publishableKey = globalStripePublishableKey;
+          if (publishableKey == null || publishableKey.isEmpty) {
+            throw Exception('STRIPE_PUBLISHABLE_KEY is not available. Please check your configuration.');
+          }
+          print('✅ [PAYMENT SHEET] Using global key after NotInitializedError');
+        } else {
+          throw Exception('Failed to access Stripe keys: $e');
+        }
+      }
+      
+      print('💳 [PAYMENT SHEET] Checking Stripe initialization...');
+      print('💳 [PAYMENT SHEET] STRIPE_PUBLISHABLE_KEY exists: ${publishableKey != null}');
+      print('💳 [PAYMENT SHEET] STRIPE_PUBLISHABLE_KEY length: ${publishableKey?.length ?? 0}');
+      
+      // Bezbedan pristup Stripe.publishableKey
+      String? currentPublishableKey;
+      try {
+        currentPublishableKey = Stripe.publishableKey;
+        print('💳 [PAYMENT SHEET] Successfully accessed Stripe.publishableKey');
+      } catch (e) {
+        print('❌ [PAYMENT SHEET] Error accessing Stripe.publishableKey: $e');
+        print('❌ [PAYMENT SHEET] Error type: ${e.runtimeType}');
+        currentPublishableKey = null;
+      }
+      print('💳 [PAYMENT SHEET] Current Stripe.publishableKey: ${currentPublishableKey ?? 'null'}');
+      
+      if (publishableKey == null || publishableKey.isEmpty) {
+        print('❌ [PAYMENT SHEET] STRIPE_PUBLISHABLE_KEY is not set in .env file');
+        throw Exception('STRIPE_PUBLISHABLE_KEY is not configured. Please check your .env file.');
+      }
+      
+      if (currentPublishableKey == null || currentPublishableKey.isEmpty) {
+        print('⚠️ [PAYMENT SHEET] Stripe.publishableKey is empty, re-initializing...');
+        try {
+          Stripe.publishableKey = publishableKey;
+          Stripe.merchantIdentifier = 'merchant.com.4paw.veterinary';
+          print('💳 [PAYMENT SHEET] Set Stripe.publishableKey and merchantIdentifier');
+          await Stripe.instance.applySettings();
+          print('✅ [PAYMENT SHEET] Stripe re-initialized successfully');
+          final verifyKey = Stripe.publishableKey;
+          if (verifyKey != null && verifyKey.isNotEmpty) {
+            print('💳 [PAYMENT SHEET] Verifying Stripe.publishableKey after applySettings: ${verifyKey.substring(0, 20)}...');
+          } else {
+            print('❌ [PAYMENT SHEET] Stripe.publishableKey is still empty after applySettings!');
+            throw Exception('Stripe SDK initialization failed - publishableKey is still empty');
+          }
+        } catch (e) {
+          print('❌ [PAYMENT SHEET] Error applying Stripe settings: $e');
+          print('❌ [PAYMENT SHEET] Error type: ${e.runtimeType}');
+          if (e is NotInitializedError) {
+            print('❌ [PAYMENT SHEET] NotInitializedError during applySettings!');
+            print('💡 [PAYMENT SHEET] This might be a platform-specific issue. Trying alternative initialization...');
+            // Pokušaj ponovo sa eksplicitnim postavljanjem
+            Stripe.publishableKey = publishableKey;
+            Stripe.merchantIdentifier = 'merchant.com.4paw.veterinary';
+            await Future.delayed(const Duration(milliseconds: 100)); // Kratka pauza
+            await Stripe.instance.applySettings();
+            print('✅ [PAYMENT SHEET] Alternative initialization completed');
+          } else {
+            throw Exception('Failed to initialize Stripe SDK: $e');
+          }
+        }
+      } else {
+        print('✅ [PAYMENT SHEET] Stripe is already initialized');
+        if (currentPublishableKey.length > 20) {
+          print('💳 [PAYMENT SHEET] Current Stripe.publishableKey: ${currentPublishableKey.substring(0, 20)}...');
+        } else {
+          print('💳 [PAYMENT SHEET] Current Stripe.publishableKey: $currentPublishableKey');
+        }
+      }
+      
+      // Dodatna provjera - provjeri da li je Stripe SDK stvarno spreman
+      String? finalCheckKey;
+      try {
+        finalCheckKey = Stripe.publishableKey;
+      } catch (e) {
+        print('❌ [PAYMENT SHEET] Error checking Stripe.publishableKey: $e');
+        finalCheckKey = null;
+      }
+      
+      if (finalCheckKey == null || finalCheckKey.isEmpty) {
+        print('❌ [PAYMENT SHEET] Stripe.publishableKey is still empty after initialization!');
+        throw Exception('Stripe SDK is not properly initialized. publishableKey is empty.');
+      }
+      
+      final amountInCents = (widget.amount * 100).round();
+      print('💳 [PAYMENT SHEET] Amount in cents: $amountInCents');
+      print('💳 [PAYMENT SHEET] Currency: BAM');
+      print('💳 [PAYMENT SHEET] Customer name: ${formData['name']}');
+      print('💳 [PAYMENT SHEET] Customer email: ${formData['email']}');
+      
+      print('💳 [PAYMENT SHEET] Step 1: Creating payment intent...');
       final data = await createPaymentIntent(
-        amount: (widget.amount * 100).round().toString(),
+        amount: amountInCents.toString(),
         currency: 'BAM',
         name: formData['name'],
         address: formData['address'],
@@ -844,18 +1027,83 @@ class _StripePaymentScreenState extends State<StripePaymentScreen> {
         country: formData['country'],
         email: formData['email'] ?? 'customer@example.com',
       );
+      print('✅ [PAYMENT SHEET] Payment intent created');
+      print('💳 [PAYMENT SHEET] Customer ID: ${data['id']}');
+      print('💳 [PAYMENT SHEET] Client secret received: ${data['client_secret']?.substring(0, 20)}...');
 
-      await Stripe.instance.initPaymentSheet(
-        paymentSheetParameters: SetupPaymentSheetParameters(
-          customFlow: false,
-          merchantDisplayName: '4Paw Veterinary',
-          paymentIntentClientSecret: data['client_secret'],
-          customerEphemeralKeySecret: data['ephemeralKey'],
-          customerId: data['id'],
-          style: ThemeMode.system,
-        ),
-      );
+      print('💳 [PAYMENT SHEET] Step 2: Initializing Stripe payment sheet...');
+      
+      // Finalna provjera prije pozivanja initPaymentSheet
+      String? finalPublishableKey;
+      try {
+        finalPublishableKey = Stripe.publishableKey;
+        if (finalPublishableKey != null && finalPublishableKey.isNotEmpty) {
+          print('💳 [PAYMENT SHEET] Final check - Stripe.publishableKey: ${finalPublishableKey.substring(0, 20)}...');
+        } else {
+          print('❌ [PAYMENT SHEET] Final check - Stripe.publishableKey is empty!');
+          throw Exception('Stripe.publishableKey is empty before initPaymentSheet');
+        }
+      } catch (e) {
+        print('❌ [PAYMENT SHEET] Error accessing Stripe.publishableKey in final check: $e');
+        print('❌ [PAYMENT SHEET] Error type: ${e.runtimeType}');
+        if (e is NotInitializedError) {
+          print('❌ [PAYMENT SHEET] NotInitializedError in final check! Re-initializing...');
+          Stripe.publishableKey = publishableKey;
+          Stripe.merchantIdentifier = 'merchant.com.4paw.veterinary';
+          await Stripe.instance.applySettings();
+          print('✅ [PAYMENT SHEET] Re-initialized after NotInitializedError');
+        } else {
+          rethrow;
+        }
+      }
+      
+      print('💳 [PAYMENT SHEET] Client secret: ${data['client_secret']?.substring(0, 20)}...');
+      print('💳 [PAYMENT SHEET] Ephemeral key: ${data['ephemeralKey']?.substring(0, 20)}...');
+      print('💳 [PAYMENT SHEET] Customer ID: ${data['id']}');
+      
+      try {
+        print('💳 [PAYMENT SHEET] Calling Stripe.instance.initPaymentSheet...');
+        await Stripe.instance.initPaymentSheet(
+          paymentSheetParameters: SetupPaymentSheetParameters(
+            customFlow: false,
+            merchantDisplayName: '4Paw Veterinary',
+            paymentIntentClientSecret: data['client_secret'],
+            customerEphemeralKeySecret: data['ephemeralKey'],
+            customerId: data['id'],
+            style: ThemeMode.system,
+          ),
+        );
+        print('✅ [PAYMENT SHEET] Payment sheet initialized successfully');
+      } catch (e) {
+        print('❌ [PAYMENT SHEET] Error calling initPaymentSheet: $e');
+        print('❌ [PAYMENT SHEET] Error type: ${e.runtimeType}');
+        print('❌ [PAYMENT SHEET] Stripe.publishableKey at error time: ${Stripe.publishableKey}');
+        if (e is NotInitializedError) {
+          print('❌ [PAYMENT SHEET] NotInitializedError detected! Stripe SDK is not initialized.');
+          print('💡 [PAYMENT SHEET] Attempting to re-initialize Stripe...');
+          Stripe.publishableKey = publishableKey;
+          Stripe.merchantIdentifier = 'merchant.com.4paw.veterinary';
+          await Stripe.instance.applySettings();
+          print('✅ [PAYMENT SHEET] Stripe re-initialized, retrying initPaymentSheet...');
+          await Stripe.instance.initPaymentSheet(
+            paymentSheetParameters: SetupPaymentSheetParameters(
+              customFlow: false,
+              merchantDisplayName: '4Paw Veterinary',
+              paymentIntentClientSecret: data['client_secret'],
+              customerEphemeralKeySecret: data['ephemeralKey'],
+              customerId: data['id'],
+              style: ThemeMode.system,
+            ),
+          );
+          print('✅ [PAYMENT SHEET] Payment sheet initialized successfully after retry');
+        } else {
+          rethrow;
+        }
+      }
     } catch (e) {
+      print('❌ [PAYMENT SHEET] Error initializing payment sheet: $e');
+      print('❌ [PAYMENT SHEET] Error type: ${e.runtimeType}');
+      print('❌ [PAYMENT SHEET] Stack trace: ${StackTrace.current}');
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
       rethrow;
     }
@@ -872,12 +1120,67 @@ class _StripePaymentScreenState extends State<StripePaymentScreen> {
     required String country,
     required String email,
   }) async {
+    print('💳 [STRIPE API] Creating payment intent...');
+    print('💳 [STRIPE API] Amount: $amount, Currency: $currency');
+    print('💳 [STRIPE API] Customer: $name ($email)');
+    
     try {
-      final secretKey = dotenv.env['STRIPE_SECRET_KEY'];
-      if (secretKey == null) {
+      // Koristi globalnu varijablu umjesto direktnog pristupa dotenv.env
+      String? secretKey = globalStripeSecretKey;
+      print('💳 [STRIPE API] Checking secret key...');
+      print('💳 [STRIPE API] globalStripeSecretKey is null: ${globalStripeSecretKey == null}');
+      print('💳 [STRIPE API] globalStripeSecretKey length: ${globalStripeSecretKey?.length ?? 0}');
+      if (globalStripeSecretKey != null) {
+        print('💳 [STRIPE API] globalStripeSecretKey starts with: ${globalStripeSecretKey!.substring(0, 7)}');
+        print('💳 [STRIPE API] globalStripeSecretKey ends with: ${globalStripeSecretKey!.substring(globalStripeSecretKey!.length - 3)}');
+      }
+      
+      if (secretKey == null || secretKey.isEmpty) {
+        // Fallback na dotenv
+        print('⚠️ [STRIPE API] Global key not found, trying dotenv...');
+        try {
+          secretKey = dotenv.env['STRIPE_SECRET_KEY'];
+          print('💳 [STRIPE API] dotenv key found: ${secretKey != null}');
+          if (secretKey != null) {
+            print('💳 [STRIPE API] dotenv key length: ${secretKey.length}');
+          }
+        } catch (e) {
+          print('⚠️ [STRIPE API] Error accessing dotenv for secret key: $e');
+        }
+      }
+      
+      // Ako ni globalna ni dotenv nisu dostupni, koristi hardcoded
+      if (secretKey == null || secretKey.isEmpty) {
+        print('⚠️ [STRIPE API] Both global and dotenv keys are null, using hardcoded fallback...');
+        secretKey = 'sk_test_51SNB9BCFslvIasyndmYsoK2xdZJlCh9XqY9zKFbiEnxhTtNdbVEzabMfyasUkwscnW5jM0Y0ZTXyIbWZUWu7XeJ200ngtQnmYO';
+        print('✅ [STRIPE API] Using hardcoded secret key');
+      }
+      
+      // Provjeri da li je key ispravan
+      if (secretKey == null || secretKey.isEmpty) {
+        print('❌ [STRIPE API] STRIPE_SECRET_KEY is still null or empty after all attempts');
         throw Exception('STRIPE_SECRET_KEY not found in environment variables');
       }
+      
+      // Trim key da uklonimo eventualne razmake
+      secretKey = secretKey.trim();
+      
+      print('✅ [STRIPE API] Stripe secret key found (length: ${secretKey.length})');
+      print('💳 [STRIPE API] Secret key starts with: ${secretKey.substring(0, 7)}');
+      print('💳 [STRIPE API] Secret key ends with: ${secretKey.substring(secretKey.length - 3)}');
+      
+      // Provjeri da li je key ispravne dužine (Stripe secret key je obično 107-108 karaktera)
+      if (secretKey.length < 100) {
+        print('❌ [STRIPE API] WARNING: Secret key seems too short (${secretKey.length} chars). Expected ~107-108 chars.');
+      }
 
+      print('💳 [STRIPE API] Step 1: Creating Stripe customer...');
+      print('💳 [STRIPE API] Final secret key before API call:');
+      print('💳 [STRIPE API]   Length: ${secretKey.length}');
+      print('💳 [STRIPE API]   First 20 chars: ${secretKey.substring(0, 20)}');
+      print('💳 [STRIPE API]   Last 20 chars: ${secretKey.substring(secretKey.length - 20)}');
+      print('💳 [STRIPE API]   Full key (for debugging): $secretKey');
+      
       final customerResponse = await http.post(
         Uri.parse('https://api.stripe.com/v1/customers'),
         headers: {
@@ -894,13 +1197,34 @@ class _StripePaymentScreenState extends State<StripePaymentScreen> {
         },
       );
 
+      print('💳 [STRIPE API] Customer creation response status: ${customerResponse.statusCode}');
       if (customerResponse.statusCode != 200) {
+        print('❌ [STRIPE API] Failed to create customer');
+        print('❌ [STRIPE API] Response status: ${customerResponse.statusCode}');
+        print('❌ [STRIPE API] Response headers: ${customerResponse.headers}');
+        print('❌ [STRIPE API] Response body: ${customerResponse.body}');
+        
+        // Pokušaj parsirati error iz Stripe response
+        try {
+          final errorData = jsonDecode(customerResponse.body);
+          print('❌ [STRIPE API] Parsed customer error: $errorData');
+          if (errorData['error'] != null) {
+            print('❌ [STRIPE API] Stripe error type: ${errorData['error']['type']}');
+            print('❌ [STRIPE API] Stripe error code: ${errorData['error']['code']}');
+            print('❌ [STRIPE API] Stripe error message: ${errorData['error']['message']}');
+          }
+        } catch (parseError) {
+          print('❌ [STRIPE API] Could not parse customer error response: $parseError');
+        }
+        
         throw Exception('Failed to create customer: ${customerResponse.body}');
       }
 
       final customerData = jsonDecode(customerResponse.body);
       final customerId = customerData['id'];
+      print('✅ [STRIPE API] Customer created: $customerId');
 
+      print('💳 [STRIPE API] Step 2: Creating ephemeral key...');
       final ephemeralKeyResponse = await http.post(
         Uri.parse('https://api.stripe.com/v1/ephemeral_keys'),
         headers: {
@@ -911,11 +1235,49 @@ class _StripePaymentScreenState extends State<StripePaymentScreen> {
         body: {'customer': customerId},
       );
 
+      print('💳 [STRIPE API] Ephemeral key response status: ${ephemeralKeyResponse.statusCode}');
       if (ephemeralKeyResponse.statusCode != 200) {
+        print('❌ [STRIPE API] Failed to create ephemeral key');
+        print('❌ [STRIPE API] Response status: ${ephemeralKeyResponse.statusCode}');
+        print('❌ [STRIPE API] Response headers: ${ephemeralKeyResponse.headers}');
+        print('❌ [STRIPE API] Response body: ${ephemeralKeyResponse.body}');
+        
+        // Pokušaj parsirati error iz Stripe response
+        try {
+          final errorData = jsonDecode(ephemeralKeyResponse.body);
+          print('❌ [STRIPE API] Parsed ephemeral key error: $errorData');
+          if (errorData['error'] != null) {
+            print('❌ [STRIPE API] Stripe error type: ${errorData['error']['type']}');
+            print('❌ [STRIPE API] Stripe error code: ${errorData['error']['code']}');
+            print('❌ [STRIPE API] Stripe error message: ${errorData['error']['message']}');
+          }
+        } catch (parseError) {
+          print('❌ [STRIPE API] Could not parse ephemeral key error response: $parseError');
+        }
+        
         throw Exception('Failed to create ephemeral key: ${ephemeralKeyResponse.body}');
       }
 
       final ephemeralKeyData = jsonDecode(ephemeralKeyResponse.body);
+      print('✅ [STRIPE API] Ephemeral key created');
+
+      print('💳 [STRIPE API] Step 3: Creating payment intent...');
+      final serviceName = widget.service?['name'] ?? 'Veterinary Service';
+      final paymentIntentBody = {
+        'amount': amount,
+        'currency': currency.toLowerCase(),
+        'customer': customerId,
+        'payment_method_types[]': 'card',
+        'description': '4Paw Veterinary Appointment Payment for $serviceName',
+        'metadata[name]': name,
+        'metadata[address]': address,
+        'metadata[city]': city,
+        'metadata[state]': state,
+        'metadata[country]': country,
+        'metadata[appointment]': widget.appointment.appointmentNumber,
+        'metadata[pet]': widget.appointment.petName ?? 'Unknown',
+      };
+      print('💳 [STRIPE API] Payment intent body: $paymentIntentBody');
 
       final paymentIntentResponse = await http.post(
         Uri.parse('https://api.stripe.com/v1/payment_intents'),
@@ -923,24 +1285,16 @@ class _StripePaymentScreenState extends State<StripePaymentScreen> {
           'Authorization': 'Bearer $secretKey',
           'Content-Type': 'application/x-www-form-urlencoded',
         },
-        body: {
-          'amount': amount,
-          'currency': currency.toLowerCase(),
-          'customer': customerId,
-          'payment_method_types[]': 'card',
-          'description': '4Paw Veterinary Appointment Payment for ${widget.service?['name']}',
-          'metadata[name]': name,
-          'metadata[address]': address,
-          'metadata[city]': city,
-          'metadata[state]': state,
-          'metadata[country]': country,
-          'metadata[appointment]': widget.appointment.appointmentNumber,
-          'metadata[pet]': widget.appointment.petName ?? 'Unknown',
-        },
+        body: paymentIntentBody,
       );
 
+      print('💳 [STRIPE API] Payment intent response status: ${paymentIntentResponse.statusCode}');
       if (paymentIntentResponse.statusCode == 200) {
         final paymentIntentData = jsonDecode(paymentIntentResponse.body);
+        print('✅ [STRIPE API] Payment intent created successfully');
+        print('💳 [STRIPE API] Payment intent ID: ${paymentIntentData['id']}');
+        print('💳 [STRIPE API] Client secret: ${paymentIntentData['client_secret']?.substring(0, 20)}...');
+        
         return {
           'client_secret': paymentIntentData['client_secret'],
           'ephemeralKey': ephemeralKeyData['secret'],
@@ -949,9 +1303,30 @@ class _StripePaymentScreenState extends State<StripePaymentScreen> {
           'currency': currency,
         };
       } else {
+        print('❌ [STRIPE API] Failed to create payment intent');
+        print('❌ [STRIPE API] Response status: ${paymentIntentResponse.statusCode}');
+        print('❌ [STRIPE API] Response headers: ${paymentIntentResponse.headers}');
+        print('❌ [STRIPE API] Response body: ${paymentIntentResponse.body}');
+        
+        // Pokušaj parsirati error iz Stripe response
+        try {
+          final errorData = jsonDecode(paymentIntentResponse.body);
+          print('❌ [STRIPE API] Parsed error: $errorData');
+          if (errorData['error'] != null) {
+            print('❌ [STRIPE API] Stripe error type: ${errorData['error']['type']}');
+            print('❌ [STRIPE API] Stripe error code: ${errorData['error']['code']}');
+            print('❌ [STRIPE API] Stripe error message: ${errorData['error']['message']}');
+          }
+        } catch (parseError) {
+          print('❌ [STRIPE API] Could not parse error response: $parseError');
+        }
+        
         throw Exception('Failed to create payment intent: ${paymentIntentResponse.body}');
       }
     } catch (e) {
+      print('❌ [STRIPE API] Error creating payment intent: $e');
+      print('❌ [STRIPE API] Error type: ${e.runtimeType}');
+      print('❌ [STRIPE API] Stack trace: ${StackTrace.current}');
       throw Exception('Error creating payment intent: $e');
     }
   }

@@ -1,4 +1,5 @@
 import org.gradle.api.tasks.compile.JavaCompile
+import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
 
 plugins {
     id("com.android.application")
@@ -52,7 +53,18 @@ flutter {
 
 // Suppress obsolete Java 8 warnings from dependencies
 tasks.withType<JavaCompile>().configureEach {
-    options.compilerArgs.add("-Xlint:-options")
+    options.compilerArgs.addAll(listOf(
+        "-Xlint:-options",
+        "-Xlint:-deprecation"
+    ))
+    options.isDeprecation = false
+}
+
+// Suppress Kotlin deprecation warnings
+tasks.withType<KotlinCompile>().configureEach {
+    kotlinOptions {
+        suppressWarnings = true
+    }
 }
 
 dependencies {

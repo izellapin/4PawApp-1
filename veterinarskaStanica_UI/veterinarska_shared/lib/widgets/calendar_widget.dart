@@ -39,8 +39,10 @@ class _CalendarWidgetState extends State<CalendarWidget> {
   @override
   void didUpdateWidget(CalendarWidget oldWidget) {
     super.didUpdateWidget(oldWidget);
-    // Update appointments when the widget is rebuilt
-    _selectedAppointments.value = _getAppointmentsForDay(_selectedDay!);
+    // Update appointments when the widget is rebuilt or appointments list changes
+    if (oldWidget.appointments != widget.appointments) {
+      _selectedAppointments.value = _getAppointmentsForDay(_selectedDay!);
+    }
   }
 
   @override
@@ -498,7 +500,7 @@ class _CalendarWidgetState extends State<CalendarWidget> {
                                   ),
                                   const SizedBox(height: 2),
                                   Text(
-                                    appointment.typeText,
+                                    appointment.serviceName ?? appointment.typeText,
                                     style: TextStyle(
                                       color: Colors.grey.shade600,
                                       fontSize: 12,

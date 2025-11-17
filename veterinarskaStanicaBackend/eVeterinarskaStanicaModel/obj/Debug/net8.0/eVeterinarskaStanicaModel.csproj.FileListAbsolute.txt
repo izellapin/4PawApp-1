@@ -21,3 +21,4 @@ C:\Users\User\Desktop\RS2-4PawApplication-main\veterinarskaStanicaBackend\eVeter
 C:\Users\User\Desktop\RS2-4PawApplication-main\veterinarskaStanicaBackend\eVeterinarskaStanicaModel\obj\Debug\net8.0\refint\eVeterinarskaStanicaModel.dll
 C:\Users\User\Desktop\RS2-4PawApplication-main\veterinarskaStanicaBackend\eVeterinarskaStanicaModel\obj\Debug\net8.0\eVeterinarskaStanicaModel.pdb
 C:\Users\User\Desktop\RS2-4PawApplication-main\veterinarskaStanicaBackend\eVeterinarskaStanicaModel\obj\Debug\net8.0\ref\eVeterinarskaStanicaModel.dll
+C:\Users\User\Desktop\RS2-4PawApplication-main\veterinarskaStanicaBackend\eVeterinarskaStanicaModel\obj\Debug\net8.0\eVeterinarskaStanicaModel.sourcelink.json

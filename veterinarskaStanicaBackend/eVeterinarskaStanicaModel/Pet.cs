@@ -47,6 +47,8 @@ namespace eVeterinarskaStanicaModel
 
         public PetStatus Status { get; set; } = PetStatus.Active;
 
+        public bool IsDeleted { get; set; } = false; // Soft delete flag - obrisani pacijenti su nevidljivi
+
         [StringLength(1000)]
         public string? Notes { get; set; }
 

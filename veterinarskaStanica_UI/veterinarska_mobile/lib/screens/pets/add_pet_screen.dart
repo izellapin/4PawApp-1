@@ -20,9 +20,9 @@ class _AddPetScreenState extends State<AddPetScreen> {
   final _weightController = TextEditingController();
   final _microchipController = TextEditingController();
   final _notesController = TextEditingController();
+  final _ageController = TextEditingController();
   
   PetGender _selectedGender = PetGender.male;
-  DateTime? _selectedDateOfBirth;
   bool _isLoading = false;
 
   @override
@@ -38,7 +38,17 @@ class _AddPetScreenState extends State<AddPetScreen> {
       _microchipController.text = widget.petToEdit!.microchipNumber ?? '';
       _notesController.text = widget.petToEdit!.notes ?? '';
       _selectedGender = widget.petToEdit!.gender;
-      _selectedDateOfBirth = widget.petToEdit!.dateOfBirth;
+      // Ako postoji datum rođenja, izračunaj starost
+      if (widget.petToEdit!.dateOfBirth != null) {
+        final now = DateTime.now();
+        final birthDate = widget.petToEdit!.dateOfBirth!;
+        final age = now.year - birthDate.year;
+        if (now.month < birthDate.month || (now.month == birthDate.month && now.day < birthDate.day)) {
+          _ageController.text = (age - 1).toString();
+        } else {
+          _ageController.text = age.toString();
+        }
+      }
     }
   }
 
@@ -51,6 +61,7 @@ class _AddPetScreenState extends State<AddPetScreen> {
     _weightController.dispose();
     _microchipController.dispose();
     _notesController.dispose();
+    _ageController.dispose();
     super.dispose();
   }
 
@@ -72,6 +83,17 @@ class _AddPetScreenState extends State<AddPetScreen> {
 
     try {
       final apiClient = serviceLocator.apiClient;
+      
+      // Izračunaj dateOfBirth iz unesene starosti
+      DateTime? dateOfBirth;
+      if (_ageController.text.isNotEmpty) {
+        final age = int.tryParse(_ageController.text);
+        if (age != null && age >= 0) {
+          final now = DateTime.now();
+          dateOfBirth = DateTime(now.year - age, now.month, now.day);
+        }
+      }
+      
       final petData = {
         'name': _nameController.text,
         'species': _speciesController.text,
@@ -81,7 +103,7 @@ class _AddPetScreenState extends State<AddPetScreen> {
         'weight': _weightController.text.isEmpty ? null : double.tryParse(_weightController.text),
         'microchipNumber': _microchipController.text.isEmpty ? null : _microchipController.text,
         'notes': _notesController.text.isEmpty ? null : _notesController.text,
-        'dateOfBirth': _selectedDateOfBirth?.toIso8601String(),
+        'dateOfBirth': dateOfBirth?.toIso8601String(),
         // petOwnerId se ne šalje jer backend automatski koristi trenutnog korisnika
       };
       
@@ -228,42 +250,27 @@ class _AddPetScreenState extends State<AddPetScreen> {
               
               const SizedBox(height: 16),
               
-              // Datum rođenja
-              InkWell(
-                onTap: () async {
-                  final date = await showDatePicker(
-                    context: context,
-                    initialDate: DateTime.now().subtract(const Duration(days: 365)),
-                    firstDate: DateTime(2000),
-                    lastDate: DateTime.now(),
-                  );
-                  if (date != null) {
-                    setState(() {
-                      _selectedDateOfBirth = date;
-                    });
-                  }
-                },
-                child: Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    border: Border.all(color: Colors.grey),
+              // Starost
+              TextFormField(
+                controller: _ageController,
+                keyboardType: TextInputType.number,
+                decoration: InputDecoration(
+                  labelText: 'Starost (godine)',
+                  hintText: 'Unesite starost (opcionalno)',
+                  prefixIcon: const Icon(Icons.cake),
+                  border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(12),
                   ),
-                  child: Row(
-                    children: [
-                      const Icon(Icons.cake, color: Colors.grey),
-                      const SizedBox(width: 12),
-                      Text(
-                        _selectedDateOfBirth != null
-                            ? 'Datum rođenja: ${_selectedDateOfBirth!.day}/${_selectedDateOfBirth!.month}/${_selectedDateOfBirth!.year}'
-                            : 'Izaberite datum rođenja (opcionalno)',
-                        style: TextStyle(
-                          color: _selectedDateOfBirth != null ? Colors.black : Colors.grey,
-                        ),
-                      ),
-                    ],
-                  ),
                 ),
+                validator: (value) {
+                  if (value != null && value.isNotEmpty) {
+                    final age = int.tryParse(value);
+                    if (age == null || age < 0 || age > 50) {
+                      return 'Unesite valjanu starost (0-50)';
+                    }
+                  }
+                  return null;
+                },
               ),
               
               const SizedBox(height: 16),

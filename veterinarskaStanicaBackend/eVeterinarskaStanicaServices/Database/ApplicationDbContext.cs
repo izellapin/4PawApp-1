@@ -13,6 +13,7 @@ namespace eVeterinarskaStanicaServices.Database
         // DbSets
         public DbSet<User> Users { get; set; }
         public DbSet<Service> Services { get; set; }
+        public DbSet<ServiceSpeciesPrice> ServiceSpeciesPrices { get; set; }
         public DbSet<Asset> Assets { get; set; }
         public DbSet<Category> Categories { get; set; }
         public DbSet<Order> Orders { get; set; }
@@ -121,6 +122,24 @@ namespace eVeterinarskaStanicaServices.Database
                     .WithOne(r => r.Service)
                     .HasForeignKey(r => r.ServiceId)
                     .OnDelete(DeleteBehavior.SetNull);
+            });
+
+            // Configure ServiceSpeciesPrice entity
+            modelBuilder.Entity<ServiceSpeciesPrice>(entity =>
+            {
+                entity.HasKey(e => e.Id);
+                entity.Property(e => e.Species).HasMaxLength(50);
+                entity.Property(e => e.Price).HasColumnType("decimal(18,2)");
+                entity.Property(e => e.DiscountPrice).HasColumnType("decimal(18,2)");
+
+                // Configure relationship with Service
+                entity.HasOne(ssp => ssp.Service)
+                    .WithMany(s => s.ServiceSpeciesPrices)
+                    .HasForeignKey(ssp => ssp.ServiceId)
+                    .OnDelete(DeleteBehavior.Cascade);
+
+                // Create unique index for ServiceId + Species combination
+                entity.HasIndex(e => new { e.ServiceId, e.Species }).IsUnique();
             });
 
             // Configure Asset entity

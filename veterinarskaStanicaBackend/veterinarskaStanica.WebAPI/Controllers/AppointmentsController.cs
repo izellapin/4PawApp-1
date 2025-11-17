@@ -57,7 +57,58 @@ namespace veterinarskaStanica.WebAPI.Controllers
                 }
 
                 var appointments = await query
-                    .Select(a => new AppointmentDto
+                    .Include(a => a.Pet)
+                    .ThenInclude(p => p.PetOwner)
+                    .Include(a => a.Veterinarian)
+                    .Include(a => a.Service) // Eksplicitno učitaj Service
+                    .OrderByDescending(a => a.AppointmentDate)
+                    .Take(50) // Ograniči na 50 rezultata
+                    .ToListAsync();
+
+                // Mapiraj na DTO nakon učitavanja
+                var appointmentDtos = appointments.Select((a, index) => {
+                    string? serviceName = null;
+                    
+                    // Debug logging za prvi appointment
+                    if (index == 0 && appointments.Count > 0)
+                    {
+                        _logger.LogInformation($"🔍 Debug Appointment {a.Id}:");
+                        _logger.LogInformation($"   Reason: '{a.Reason}' (IsNullOrEmpty: {string.IsNullOrEmpty(a.Reason)})");
+                        _logger.LogInformation($"   Service: {(a.Service != null ? $"Name='{a.Service.Name}'" : "NULL")}");
+                        _logger.LogInformation($"   Type: {a.Type}");
+                    }
+                    
+                    if (!string.IsNullOrEmpty(a.Reason))
+                    {
+                        serviceName = a.Reason;
+                        if (index == 0 && appointments.Count > 0)
+                            _logger.LogInformation($"   ✅ Using Reason: '{serviceName}'");
+                    }
+                    else if (a.Service != null && !string.IsNullOrEmpty(a.Service.Name))
+                    {
+                        serviceName = a.Service.Name;
+                        if (index == 0 && appointments.Count > 0)
+                            _logger.LogInformation($"   ✅ Using Service.Name: '{serviceName}'");
+                    }
+                    else
+                    {
+                        serviceName = a.Type switch
+                        {
+                            AppointmentType.Checkup => "Godišnji pregled",
+                            AppointmentType.Vaccination => "Vakcinacija",
+                            AppointmentType.Surgery => "Sterilizacija",
+                            AppointmentType.Emergency => "Hitna pomoć",
+                            AppointmentType.Grooming => "Kompletno čišćenje",
+                            AppointmentType.Dental => "Čišćenje zuba",
+                            AppointmentType.Consultation => "Konsultacija",
+                            AppointmentType.FollowUp => "Kontrola",
+                            _ => null
+                        };
+                        if (index == 0 && appointments.Count > 0)
+                            _logger.LogInformation($"   ✅ Using Type mapping: '{serviceName}'");
+                    }
+                    
+                    var dto = new AppointmentDto
                     {
                         Id = a.Id,
                         AppointmentNumber = a.AppointmentNumber,
@@ -66,10 +117,13 @@ namespace veterinarskaStanica.WebAPI.Controllers
                         EndTime = a.EndTime.ToString(@"hh\:mm"),
                         Type = (int)a.Type,
                         Status = (int)a.Status,
+                        PetId = a.PetId, // Eksplicitno postavi PetId
                         PetName = a.Pet.Name,
+                        VeterinarianId = a.VeterinarianId,
                         OwnerName = $"{a.Pet.PetOwner.FirstName} {a.Pet.PetOwner.LastName}",
                         VeterinarianName = $"{a.Veterinarian.FirstName} {a.Veterinarian.LastName}",
-                        ServiceName = a.Service != null ? a.Service.Name : null,
+                        ServiceId = a.ServiceId,
+                        ServiceName = serviceName,
                         EstimatedCost = a.EstimatedCost,
                         ActualCost = a.ActualCost,
                         IsPaid = a.IsPaid,
@@ -78,13 +132,45 @@ namespace veterinarskaStanica.WebAPI.Controllers
                         PaymentTransactionId = a.PaymentTransactionId,
                         Reason = a.Reason,
                         Notes = a.Notes
-                    })
-                    .OrderByDescending(a => a.AppointmentDate)
-                    .Take(50) // Ograniči na 50 rezultata
-                    .ToListAsync();
+                    };
+                    
+                    // Debug: Provjeri da li je PetId postavljen
+                    if (index == 0 && appointments.Count > 0)
+                    {
+                        _logger.LogInformation($"🔍 [DEBUG] Created DTO for appointment {a.Id}: PetId = {dto.PetId}, PetName = {dto.PetName}");
+                    }
+                    
+                    return dto;
+                }).ToList();
 
-                _logger.LogInformation($"✅ Returning {appointments.Count} appointments");
-                return Ok(appointments);
+                _logger.LogInformation($"✅ Returning {appointmentDtos.Count} appointments");
+                _logger.LogInformation($"📋 Service names: {string.Join(", ", appointmentDtos.Where(a => !string.IsNullOrEmpty(a.ServiceName)).Select(a => a.ServiceName))}");
+                _logger.LogInformation($"⚠️ Appointments without ServiceName: {appointmentDtos.Count(a => string.IsNullOrEmpty(a.ServiceName))}");
+                
+                // Debug: Log first appointment DTO to verify PetId is set
+                if (appointmentDtos.Count > 0)
+                {
+                    var firstDto = appointmentDtos[0];
+                    _logger.LogInformation($"🔍 [DEBUG] ===== FIRST APPOINTMENT DTO DEBUG =====");
+                    _logger.LogInformation($"🔍 [DEBUG] Id: {firstDto.Id}");
+                    _logger.LogInformation($"🔍 [DEBUG] PetId: {firstDto.PetId}");
+                    _logger.LogInformation($"🔍 [DEBUG] PetName: {firstDto.PetName}");
+                    _logger.LogInformation($"🔍 [DEBUG] VeterinarianId: {firstDto.VeterinarianId}");
+                    _logger.LogInformation($"🔍 [DEBUG] ServiceId: {firstDto.ServiceId}");
+                    
+                    // Serialize first DTO to JSON to see what's actually being sent
+                    var jsonOptions = new System.Text.Json.JsonSerializerOptions 
+                    { 
+                        PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase,
+                        WriteIndented = true 
+                    };
+                    var json = System.Text.Json.JsonSerializer.Serialize(firstDto, jsonOptions);
+                    _logger.LogInformation($"🔍 [DEBUG] Serialized JSON (first 1000 chars):");
+                    _logger.LogInformation(json.Substring(0, Math.Min(1000, json.Length)));
+                    _logger.LogInformation($"🔍 [DEBUG] ===== END DEBUG =====");
+                }
+                
+                return Ok(appointmentDtos);
             }
             catch (Exception ex)
             {
@@ -126,31 +212,52 @@ namespace veterinarskaStanica.WebAPI.Controllers
 
             var appointments = await _context.Appointments
                 .Where(a => a.VeterinarianId == veterinarianId)
-                .Select(a => new AppointmentDto
-                {
-                    Id = a.Id,
-                    AppointmentNumber = a.AppointmentNumber,
-                    AppointmentDate = a.AppointmentDate,
-                    StartTime = a.StartTime.ToString(@"hh\:mm"),
-                    EndTime = a.EndTime.ToString(@"hh\:mm"),
-                    Type = (int)a.Type,
-                    Status = (int)a.Status,
-                    PetName = a.Pet.Name,
-                    OwnerName = $"{a.Pet.PetOwner.FirstName} {a.Pet.PetOwner.LastName}",
-                    ServiceName = a.Service != null ? a.Service.Name : null,
-                    EstimatedCost = a.EstimatedCost,
-                    ActualCost = a.ActualCost,
-                    IsPaid = a.IsPaid,
-                    PaymentDate = a.PaymentDate,
-                    PaymentMethod = a.PaymentMethod,
-                    PaymentTransactionId = a.PaymentTransactionId,
-                    Reason = a.Reason,
-                    Notes = a.Notes
-                })
+                .Include(a => a.Pet)
+                .ThenInclude(p => p.PetOwner)
+                .Include(a => a.Veterinarian)
+                .Include(a => a.Service) // Eksplicitno učitaj Service
                 .OrderByDescending(a => a.AppointmentDate)
                 .ToListAsync();
 
-            return Ok(appointments);
+            // Mapiraj na DTO nakon učitavanja
+            var appointmentDtos = appointments.Select(a => new AppointmentDto
+            {
+                Id = a.Id,
+                AppointmentNumber = a.AppointmentNumber,
+                AppointmentDate = a.AppointmentDate,
+                StartTime = a.StartTime.ToString(@"hh\:mm"),
+                EndTime = a.EndTime.ToString(@"hh\:mm"),
+                Type = (int)a.Type,
+                Status = (int)a.Status,
+                PetId = a.PetId,
+                PetName = a.Pet.Name,
+                VeterinarianId = a.VeterinarianId,
+                OwnerName = $"{a.Pet.PetOwner.FirstName} {a.Pet.PetOwner.LastName}",
+                VeterinarianName = $"{a.Veterinarian.FirstName} {a.Veterinarian.LastName}",
+                ServiceId = a.ServiceId,
+                ServiceName = !string.IsNullOrEmpty(a.Reason) 
+                    ? a.Reason 
+                    : (a.Service != null && !string.IsNullOrEmpty(a.Service.Name) 
+                        ? a.Service.Name 
+                        : (a.Type == AppointmentType.Checkup ? "Godišnji pregled" :
+                           a.Type == AppointmentType.Vaccination ? "Vakcinacija" :
+                           a.Type == AppointmentType.Surgery ? "Sterilizacija" :
+                           a.Type == AppointmentType.Emergency ? "Hitna pomoć" :
+                           a.Type == AppointmentType.Grooming ? "Kompletno čišćenje" :
+                           a.Type == AppointmentType.Dental ? "Čišćenje zuba" :
+                           a.Type == AppointmentType.Consultation ? "Konsultacija" :
+                           a.Type == AppointmentType.FollowUp ? "Kontrola" : null)),
+                EstimatedCost = a.EstimatedCost,
+                ActualCost = a.ActualCost,
+                IsPaid = a.IsPaid,
+                PaymentDate = a.PaymentDate,
+                PaymentMethod = a.PaymentMethod,
+                PaymentTransactionId = a.PaymentTransactionId,
+                Reason = a.Reason,
+                Notes = a.Notes
+            }).ToList();
+
+            return Ok(appointmentDtos);
         }
 
 
@@ -177,7 +284,11 @@ namespace veterinarskaStanica.WebAPI.Controllers
                     VeterinarianId = a.VeterinarianId,
                     OwnerName = $"{a.Pet.PetOwner.FirstName} {a.Pet.PetOwner.LastName}",
                     VeterinarianName = $"{a.Veterinarian.FirstName} {a.Veterinarian.LastName}",
-                    ServiceName = a.Service != null ? a.Service.Name : null,
+                    ServiceName = !string.IsNullOrEmpty(a.Reason) 
+                        ? a.Reason 
+                        : (a.Service != null && !string.IsNullOrEmpty(a.Service.Name) 
+                            ? a.Service.Name 
+                            : null),
                     a.EstimatedCost,
                     a.ActualCost,
                     a.Reason,
@@ -230,6 +341,10 @@ namespace veterinarskaStanica.WebAPI.Controllers
         {
             var appointments = await _context.Appointments
                 .Where(a => a.PetId == petId)
+                .Include(a => a.Pet)
+                .ThenInclude(p => p.PetOwner)
+                .Include(a => a.Veterinarian)
+                .Include(a => a.Service)
                 .Select(a => new
                 {
                     a.Id,
@@ -242,7 +357,11 @@ namespace veterinarskaStanica.WebAPI.Controllers
                     PetName = a.Pet.Name,
                     OwnerName = $"{a.Pet.PetOwner.FirstName} {a.Pet.PetOwner.LastName}",
                     VeterinarianName = $"{a.Veterinarian.FirstName} {a.Veterinarian.LastName}",
-                    ServiceName = a.Service != null ? a.Service.Name : null,
+                    ServiceName = !string.IsNullOrEmpty(a.Reason) 
+                        ? a.Reason 
+                        : (a.Service != null && !string.IsNullOrEmpty(a.Service.Name) 
+                            ? a.Service.Name 
+                            : null),
                     a.EstimatedCost,
                     a.ActualCost,
                     a.Reason,
@@ -524,48 +643,205 @@ namespace veterinarskaStanica.WebAPI.Controllers
         [RoleRequired(UserRole.Admin, UserRole.Veterinarian, UserRole.PetOwner)]
         public async Task<ActionResult<Appointment>> MarkPaid(int id, [FromBody] MarkPaidRequest request)
         {
-            var appointment = await _context.Appointments.FindAsync(id);
+            var startTime = DateTime.UtcNow;
+            var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            var userEmailClaim = User.FindFirst(ClaimTypes.Email)?.Value;
+            var userRoleClaim = User.FindFirst(ClaimTypes.Role)?.Value;
+            var clientIp = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "Unknown";
+            var userAgent = Request.Headers["User-Agent"].ToString();
 
-            if (appointment == null)
+            _logger.LogInformation("💳 [MARK PAID] ========== PAYMENT REQUEST STARTED ==========");
+            _logger.LogInformation("💳 [MARK PAID] Timestamp: {Timestamp}", startTime);
+            _logger.LogInformation("💳 [MARK PAID] Appointment ID: {AppointmentId}", id);
+            _logger.LogInformation("💳 [MARK PAID] User ID: {UserId}, Email: {UserEmail}, Role: {UserRole}", 
+                userIdClaim, userEmailClaim, userRoleClaim);
+            _logger.LogInformation("💳 [MARK PAID] Client IP: {ClientIp}, User-Agent: {UserAgent}", clientIp, userAgent);
+            _logger.LogInformation("💳 [MARK PAID] Request data - PaymentMethod: {PaymentMethod}, TransactionId: {TransactionId}, Amount: {Amount}",
+                request.PaymentMethod ?? "null", request.PaymentTransactionId ?? "null", request.Amount?.ToString() ?? "null");
+
+            try
             {
-                return NotFound();
-            }
+                // Load appointment with related entities for detailed logging
+                var appointment = await _context.Appointments
+                    .Include(a => a.Pet)
+                        .ThenInclude(p => p.PetOwner)
+                    .Include(a => a.Veterinarian)
+                    .Include(a => a.Service)
+                    .FirstOrDefaultAsync(a => a.Id == id);
 
-            // Označi kao plaćeno i završi termin
-            appointment.IsPaid = true;
-            appointment.PaymentDate = DateTime.UtcNow;
-            appointment.PaymentMethod = string.IsNullOrWhiteSpace(request.PaymentMethod) ? "Stripe" : request.PaymentMethod;
-            appointment.PaymentTransactionId = request.PaymentTransactionId;
-            // Kada je plaćeno, smatramo termin završenim radi izvještaja
-            appointment.Status = AppointmentStatus.Completed;
-
-            // Ako nema actual cost, postavi ga
-            if (!appointment.ActualCost.HasValue)
-            {
-                // Prvo pokušaj iz request.Amount
-                if (request.Amount.HasValue)
+                if (appointment == null)
                 {
-                    appointment.ActualCost = request.Amount.Value;
+                    _logger.LogWarning("💳 [MARK PAID] ❌ Appointment not found: {AppointmentId}", id);
+                    return NotFound();
                 }
-                // Ako nema Amount, pokušaj iz Service.Price
-                else if (appointment.ServiceId.HasValue)
+
+                var currentStatus = appointment.Status;
+                var currentIsPaid = appointment.IsPaid;
+                
+                _logger.LogInformation("💳 [MARK PAID] ✅ Appointment found - ID: {AppointmentId}", appointment.Id);
+                _logger.LogInformation("💳 [MARK PAID] Appointment Details:");
+                _logger.LogInformation("   - Status: {CurrentStatus} -> {NewStatus}", currentStatus, AppointmentStatus.Completed);
+                _logger.LogInformation("   - IsPaid: {CurrentIsPaid} -> true", currentIsPaid);
+                _logger.LogInformation("   - Appointment Date: {AppointmentDate}", appointment.AppointmentDate);
+                _logger.LogInformation("   - Appointment Number: {AppointmentNumber}", appointment.AppointmentNumber);
+                _logger.LogInformation("   - Estimated Cost: {EstimatedCost}", appointment.EstimatedCost?.ToString() ?? "null");
+                _logger.LogInformation("   - Actual Cost (before): {ActualCost}", appointment.ActualCost?.ToString() ?? "null");
+                
+                if (appointment.Pet != null)
                 {
-                    var service = await _context.Services.FindAsync(appointment.ServiceId.Value);
-                    if (service != null && service.Price > 0)
+                    _logger.LogInformation("   - Pet: {PetName} (ID: {PetId})", appointment.Pet.Name, appointment.Pet.Id);
+                    if (appointment.Pet.PetOwner != null)
                     {
-                        appointment.ActualCost = service.Price;
+                        _logger.LogInformation("   - Owner: {OwnerName} (ID: {OwnerId}, Email: {OwnerEmail})", 
+                            $"{appointment.Pet.PetOwner.FirstName} {appointment.Pet.PetOwner.LastName}",
+                            appointment.Pet.PetOwnerId, appointment.Pet.PetOwner.Email);
                     }
                 }
-                // Na kraju, koristi EstimatedCost ako postoji
-                else if (appointment.EstimatedCost.HasValue)
+                
+                if (appointment.Veterinarian != null)
                 {
-                    appointment.ActualCost = appointment.EstimatedCost;
+                    _logger.LogInformation("   - Veterinarian: {VetName} (ID: {VetId}, Email: {VetEmail})", 
+                        $"{appointment.Veterinarian.FirstName} {appointment.Veterinarian.LastName}",
+                        appointment.VeterinarianId, appointment.Veterinarian.Email);
+                }
+                
+                if (appointment.Service != null)
+                {
+                    _logger.LogInformation("   - Service: {ServiceName} (ID: {ServiceId}, Price: {ServicePrice})", 
+                        appointment.Service.Name, appointment.ServiceId, appointment.Service.Price);
+                }
+                else if (appointment.ServiceId.HasValue)
+                {
+                    _logger.LogWarning("💳 [MARK PAID] ⚠️ Service ID {ServiceId} specified but Service entity not found", appointment.ServiceId.Value);
+                }
+
+                // Označi kao plaćeno i završi termin
+                var previousStatus = appointment.Status;
+                var previousIsPaid = appointment.IsPaid;
+                var previousPaymentMethod = appointment.PaymentMethod;
+                var previousTransactionId = appointment.PaymentTransactionId;
+                
+                appointment.IsPaid = true;
+                appointment.PaymentDate = DateTime.UtcNow;
+                appointment.PaymentMethod = string.IsNullOrWhiteSpace(request.PaymentMethod) ? "Stripe" : request.PaymentMethod;
+                appointment.PaymentTransactionId = request.PaymentTransactionId;
+                // Kada je plaćeno, smatramo termin završenim radi izvještaja
+                appointment.Status = AppointmentStatus.Completed;
+
+                _logger.LogInformation("💳 [MARK PAID] 📝 Updating appointment payment fields:");
+                _logger.LogInformation("   - IsPaid: {PreviousIsPaid} -> {NewIsPaid}", previousIsPaid, appointment.IsPaid);
+                _logger.LogInformation("   - PaymentDate: null -> {PaymentDate}", appointment.PaymentDate);
+                _logger.LogInformation("   - PaymentMethod: {PreviousPaymentMethod} -> {NewPaymentMethod}", 
+                    previousPaymentMethod ?? "null", appointment.PaymentMethod);
+                _logger.LogInformation("   - PaymentTransactionId: {PreviousTransactionId} -> {NewTransactionId}", 
+                    previousTransactionId ?? "null", appointment.PaymentTransactionId ?? "null");
+                _logger.LogInformation("   - Status: {PreviousStatus} -> {NewStatus}", previousStatus, appointment.Status);
+
+                // Ako nema actual cost, postavi ga
+                if (!appointment.ActualCost.HasValue)
+                {
+                    _logger.LogInformation("💳 [MARK PAID] 💰 ActualCost not set, attempting to determine it...");
+                    var actualCostSet = false;
+                    
+                    // Prvo pokušaj iz request.Amount
+                    if (request.Amount.HasValue && request.Amount.Value > 0)
+                    {
+                        appointment.ActualCost = request.Amount.Value;
+                        _logger.LogInformation("💳 [MARK PAID] ✅ Set ActualCost from request.Amount: {Amount} KM", request.Amount.Value);
+                        actualCostSet = true;
+                    }
+                    // Ako nema Amount, pokušaj iz Service.Price
+                    else if (appointment.ServiceId.HasValue)
+                    {
+                        _logger.LogInformation("💳 [MARK PAID] 🔍 Attempting to get price from Service ID: {ServiceId}", appointment.ServiceId.Value);
+                        var service = await _context.Services.FindAsync(appointment.ServiceId.Value);
+                        if (service != null && service.Price > 0)
+                        {
+                            appointment.ActualCost = service.Price;
+                            _logger.LogInformation("💳 [MARK PAID] ✅ Set ActualCost from Service.Price: {Price} KM (Service: {ServiceName})", 
+                                service.Price, service.Name);
+                            actualCostSet = true;
+                        }
+                        else
+                        {
+                            _logger.LogWarning("💳 [MARK PAID] ⚠️ Service not found or price is 0 for ServiceId: {ServiceId}", appointment.ServiceId.Value);
+                        }
+                    }
+                    // Na kraju, koristi EstimatedCost ako postoji
+                    else if (appointment.EstimatedCost.HasValue && appointment.EstimatedCost.Value > 0)
+                    {
+                        appointment.ActualCost = appointment.EstimatedCost;
+                        _logger.LogInformation("💳 [MARK PAID] ✅ Set ActualCost from EstimatedCost: {EstimatedCost} KM", appointment.EstimatedCost.Value);
+                        actualCostSet = true;
+                    }
+                    else
+                    {
+                        _logger.LogWarning("💳 [MARK PAID] ⚠️ Could not determine ActualCost - no Amount, ServiceId, or EstimatedCost available");
+                        _logger.LogWarning("💳 [MARK PAID] ⚠️ Request.Amount: {Amount}, ServiceId: {ServiceId}, EstimatedCost: {EstimatedCost}",
+                            request.Amount?.ToString() ?? "null", 
+                            appointment.ServiceId?.ToString() ?? "null", 
+                            appointment.EstimatedCost?.ToString() ?? "null");
+                    }
+                    
+                    if (!actualCostSet)
+                    {
+                        _logger.LogError("💳 [MARK PAID] ❌ CRITICAL: ActualCost could not be determined! Payment may be incomplete.");
+                    }
+                }
+                else
+                {
+                    _logger.LogInformation("💳 [MARK PAID] ✅ ActualCost already set: {ActualCost} KM", appointment.ActualCost.Value);
+                }
+
+                _logger.LogInformation("💳 [MARK PAID] 💾 Saving changes to database...");
+                var saveStartTime = DateTime.UtcNow;
+                
+                try
+                {
+                    await _context.SaveChangesAsync();
+                    var saveDuration = (DateTime.UtcNow - saveStartTime).TotalMilliseconds;
+                    
+                    _logger.LogInformation("💳 [MARK PAID] ✅ Database save completed in {Duration}ms", saveDuration);
+                    _logger.LogInformation("💳 [MARK PAID] ✅ Appointment marked as paid successfully!");
+                    _logger.LogInformation("💳 [MARK PAID] Final Appointment State:");
+                    _logger.LogInformation("   - ID: {AppointmentId}", appointment.Id);
+                    _logger.LogInformation("   - IsPaid: {IsPaid}", appointment.IsPaid);
+                    _logger.LogInformation("   - PaymentDate: {PaymentDate}", appointment.PaymentDate);
+                    _logger.LogInformation("   - PaymentMethod: {PaymentMethod}", appointment.PaymentMethod);
+                    _logger.LogInformation("   - PaymentTransactionId: {TransactionId}", appointment.PaymentTransactionId ?? "null");
+                    _logger.LogInformation("   - Status: {Status}", appointment.Status);
+                    _logger.LogInformation("   - ActualCost: {ActualCost} KM", appointment.ActualCost?.ToString() ?? "null");
+                    _logger.LogInformation("   - EstimatedCost: {EstimatedCost} KM", appointment.EstimatedCost?.ToString() ?? "null");
+                    
+                    var totalDuration = (DateTime.UtcNow - startTime).TotalMilliseconds;
+                    _logger.LogInformation("💳 [MARK PAID] ⏱️ Total request duration: {Duration}ms", totalDuration);
+                    _logger.LogInformation("💳 [MARK PAID] ========== PAYMENT REQUEST COMPLETED SUCCESSFULLY ==========");
+
+                    return Ok(appointment);
+                }
+                catch (DbUpdateException dbEx)
+                {
+                    _logger.LogError(dbEx, "💳 [MARK PAID] ❌ Database update error - AppointmentId: {AppointmentId}", id);
+                    _logger.LogError("💳 [MARK PAID] ❌ Database error details: {Message}", dbEx.Message);
+                    if (dbEx.InnerException != null)
+                    {
+                        _logger.LogError("💳 [MARK PAID] ❌ Inner exception: {InnerMessage}", dbEx.InnerException.Message);
+                    }
+                    throw;
                 }
             }
-
-            await _context.SaveChangesAsync();
-
-            return Ok(appointment);
+            catch (Exception ex)
+            {
+                var errorDuration = (DateTime.UtcNow - startTime).TotalMilliseconds;
+                _logger.LogError(ex, "💳 [MARK PAID] ❌ ========== PAYMENT REQUEST FAILED ==========");
+                _logger.LogError("💳 [MARK PAID] ❌ Error marking appointment as paid - AppointmentId: {AppointmentId}", id);
+                _logger.LogError("💳 [MARK PAID] ❌ Error type: {ErrorType}", ex.GetType().Name);
+                _logger.LogError("💳 [MARK PAID] ❌ Error message: {ErrorMessage}", ex.Message);
+                _logger.LogError("💳 [MARK PAID] ❌ Stack trace: {StackTrace}", ex.StackTrace);
+                _logger.LogError("💳 [MARK PAID] ❌ Request duration before error: {Duration}ms", errorDuration);
+                _logger.LogError("💳 [MARK PAID] ❌ =================================================");
+                throw;
+            }
         }
 
 

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:veterinarska_shared/veterinarska_shared.dart';
+import 'pet_card_screen.dart';
 
 
 class PetsScreen extends StatefulWidget {
@@ -48,13 +49,13 @@ class _PetsScreenState extends State<PetsScreen> {
     });
 
     try {
-      // Backend već filtrira ovisno o ulozi korisnika
+      // Backend već filtrira ovisno o ulozi korisnika i obrisane pacijente (IsDeleted = true)
       print('🔄 Loading pets for desktop app...');
       final pets = await serviceLocator.apiClient.getPets();
-      print('✅ Desktop app loaded ${pets.length} pets');
+      print('✅ Desktop app loaded ${pets.length} pets (backend already filters deleted pets)');
       
       setState(() {
-        _pets = pets;
+        _pets = pets; // Backend već filtrira obrisane pacijente, tako da ne treba dodatni filter
         _isLoading = false;
       });
     } catch (e) {
@@ -258,9 +259,22 @@ class _PetsScreenState extends State<PetsScreen> {
   }
 
   Future<void> _deletePet(int petId) async {
+    // Optimistički update - odmah ukloni pacijenta iz liste
+    Pet? petToRemove;
     try {
+      petToRemove = _pets.firstWhere((pet) => pet.id == petId);
+    } catch (e) {
+      // Pacijent već nije u listi
+      petToRemove = null;
+    }
+    
+    setState(() {
+      _pets.removeWhere((pet) => pet.id == petId);
+    });
+    
+    try {
+      // Zatim pozovi API za brisanje
       await serviceLocator.apiClient.deletePet(petId);
-      await _loadPets(); // Reload pets
       
       // Pozovi callback za refresh dashboard-a
       if (widget.onPetCreated != null) {
@@ -272,15 +286,25 @@ class _PetsScreenState extends State<PetsScreen> {
           const SnackBar(
             content: Text('✅ Pacijent je uspešno obrisan'),
             backgroundColor: Colors.green,
+            duration: Duration(seconds: 2),
           ),
         );
       }
     } catch (e) {
+      // Ako brisanje ne uspije, vrati pacijenta u listu (ako je bio uklonjen)
+      if (petToRemove != null) {
+        setState(() {
+          _pets.add(petToRemove!);
+          _pets.sort((a, b) => a.name.compareTo(b.name));
+        });
+      }
+      
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('❌ Greška pri brisanju: $e'),
             backgroundColor: Colors.red,
+            duration: const Duration(seconds: 3),
           ),
         );
       }
@@ -289,12 +313,12 @@ class _PetsScreenState extends State<PetsScreen> {
 
   void _showAddPetDialog() {
     final nameController = TextEditingController();
-    final speciesController = TextEditingController();
     final breedController = TextEditingController();
     final colorController = TextEditingController();
     final weightController = TextEditingController();
     final microchipController = TextEditingController();
     final notesController = TextEditingController();
+    final ageController = TextEditingController();
     
     // Vlasnik polja
     final ownerFirstNameController = TextEditingController();
@@ -304,7 +328,16 @@ class _PetsScreenState extends State<PetsScreen> {
     
     PetGender selectedGender = PetGender.male;
     PetStatus selectedStatus = PetStatus.active;
-    DateTime? selectedBirthDate;
+    String? selectedSpecies;
+    
+    // Lista vrsta životinja
+    final List<String> speciesList = [
+      'Pas',
+      'Mačka',
+      'Ptica',
+      'Zec',
+      'Glodar'
+    ];
 
     showDialog(
       context: context,
@@ -374,13 +407,28 @@ class _PetsScreenState extends State<PetsScreen> {
                             ),
                             const SizedBox(width: 16),
                             Expanded(
-                              child: TextFormField(
-                                controller: speciesController,
+                              child: DropdownButtonFormField<String>(
+                                value: selectedSpecies,
                                 decoration: const InputDecoration(
                                   labelText: 'Vrsta *',
                                   border: OutlineInputBorder(),
                                   prefixIcon: Icon(Icons.category),
                                 ),
+                                items: speciesList.map((species) {
+                                  return DropdownMenuItem<String>(
+                                    value: species,
+                                    child: Text(species),
+                                  );
+                                }).toList(),
+                                onChanged: (value) {
+                                  setDialogState(() => selectedSpecies = value);
+                                },
+                                validator: (value) {
+                                  if (value == null || value.isEmpty) {
+                                    return 'Molimo izaberite vrstu';
+                                  }
+                                  return null;
+                                },
                               ),
                             ),
                           ],
@@ -463,7 +511,27 @@ class _PetsScreenState extends State<PetsScreen> {
                               ),
                             ),
                             const SizedBox(width: 16),
-                            const SizedBox(width: 16), // Placeholder za simetriju
+                            Expanded(
+                              child: TextFormField(
+                                controller: ageController,
+                                keyboardType: TextInputType.number,
+                                decoration: const InputDecoration(
+                                  labelText: 'Starost (godine)',
+                                  hintText: 'Unesite starost (opcionalno)',
+                                  border: OutlineInputBorder(),
+                                  prefixIcon: Icon(Icons.cake),
+                                ),
+                                validator: (value) {
+                                  if (value != null && value.isNotEmpty) {
+                                    final age = int.tryParse(value);
+                                    if (age == null || age < 0 || age > 50) {
+                                      return 'Unesite valjanu starost (0-50)';
+                                    }
+                                  }
+                                  return null;
+                                },
+                              ),
+                            ),
                           ],
                         ),
                         const SizedBox(height: 16),
@@ -576,7 +644,7 @@ class _PetsScreenState extends State<PetsScreen> {
                             ElevatedButton(
                               onPressed: () async {
                                 if (nameController.text.isEmpty || 
-                                    speciesController.text.isEmpty ||
+                                    selectedSpecies == null || selectedSpecies!.isEmpty ||
                                     ownerFirstNameController.text.isEmpty ||
                                     ownerLastNameController.text.isEmpty ||
                                     ownerEmailController.text.isEmpty) {
@@ -589,16 +657,27 @@ class _PetsScreenState extends State<PetsScreen> {
                                   return;
                                 }
 
+                                // Izračunaj dateOfBirth iz unesene starosti
+                                DateTime? dateOfBirth;
+                                if (ageController.text.isNotEmpty) {
+                                  final age = int.tryParse(ageController.text);
+                                  if (age != null && age >= 0) {
+                                    final now = DateTime.now();
+                                    dateOfBirth = DateTime(now.year - age, now.month, now.day);
+                                  }
+                                }
+
                                 await _createPetWithOwner({
                                   // Pacijent podaci
                                   'name': nameController.text,
-                                  'species': speciesController.text,
+                                  'species': selectedSpecies!,
                                   'breed': breedController.text.isEmpty ? null : breedController.text,
                                   'gender': selectedGender == PetGender.male ? 1 : 2,
                                   'weight': weightController.text.isEmpty ? null : double.tryParse(weightController.text),
                                   'color': colorController.text.isEmpty ? null : colorController.text,
                                   'notes': notesController.text.isEmpty ? null : notesController.text,
                                   'microchip': microchipController.text.isEmpty ? null : microchipController.text,
+                                  'dateOfBirth': dateOfBirth?.toIso8601String(),
                                   // Vlasnik podaci
                                   'ownerFirstName': ownerFirstNameController.text,
                                   'ownerLastName': ownerLastNameController.text,
@@ -676,7 +755,8 @@ class _PetsScreenState extends State<PetsScreen> {
         'weight': data['weight'],
         'color': data['color'],
         'notes': data['notes'],
-        'microchip': data['microchip'],
+        'microchipNumber': data['microchip'],
+        'dateOfBirth': data['dateOfBirth'],
         'petOwnerId': ownerResponse['id'], // ID novog vlasnika
       };
       
@@ -956,18 +1036,26 @@ class _PetsScreenState extends State<PetsScreen> {
             
             // Status badge
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
               decoration: BoxDecoration(
                 color: pet.status == PetStatus.active 
-                    ? Colors.green.withOpacity(0.1)
-                    : Colors.red.withOpacity(0.1),
+                    ? Colors.green.withOpacity(0.15)
+                    : Colors.red.withOpacity(0.15),
                 borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: pet.status == PetStatus.active 
+                      ? Colors.green.withOpacity(0.5)
+                      : Colors.red.withOpacity(0.5),
+                  width: 1,
+                ),
               ),
               child: Text(
                 pet.status == PetStatus.active ? 'Aktivan' : 'Neaktivan',
                 style: TextStyle(
-                  fontSize: 10,
-                  color: pet.status == PetStatus.active ? Colors.green : Colors.red,
+                  fontSize: 11,
+                  color: pet.status == PetStatus.active 
+                      ? Colors.green.shade700 
+                      : Colors.red.shade700,
                   fontWeight: FontWeight.bold,
                 ),
               ),
@@ -978,18 +1066,25 @@ class _PetsScreenState extends State<PetsScreen> {
             Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                // Details button
-                ElevatedButton.icon(
-                  onPressed: () => _showPetDetails(pet),
-                  icon: const Icon(Icons.info_outline, size: 16),
-                  label: const Text('Detalji'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF2E7D32),
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                // Karton button (za admin i veterinar)
+                if (widget.userRole == UserRole.admin || widget.userRole == UserRole.veterinarian)
+                  ElevatedButton.icon(
+                    onPressed: () {
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (context) => PetCardScreen(pet: pet),
+                        ),
+                      );
+                    },
+                    icon: const Icon(Icons.folder, size: 16),
+                    label: const Text('KARTON'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF1976D2),
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    ),
                   ),
-                ),
-                const SizedBox(width: 8),
+                if (widget.userRole == UserRole.admin || widget.userRole == UserRole.veterinarian) const SizedBox(width: 8),
                 
                 // Delete button
                 ElevatedButton.icon(
@@ -1012,16 +1107,44 @@ class _PetsScreenState extends State<PetsScreen> {
 
   void _showEditPetDialog(Pet pet) {
     final nameController = TextEditingController(text: pet.name);
-    final speciesController = TextEditingController(text: pet.species);
     final breedController = TextEditingController(text: pet.breed ?? '');
     final colorController = TextEditingController(text: pet.color ?? '');
     final weightController = TextEditingController(text: pet.weight?.toString() ?? '');
     final microchipController = TextEditingController(text: pet.microchipNumber ?? '');
     final notesController = TextEditingController(text: pet.notes ?? '');
+    final ageController = TextEditingController();
     
     PetGender selectedGender = pet.gender;
     PetStatus selectedStatus = pet.status;
-    DateTime? selectedBirthDate = pet.dateOfBirth;
+    String? selectedSpecies = pet.species;
+    
+    // Ako postoji datum rođenja, izračunaj starost
+    if (pet.dateOfBirth != null) {
+      final now = DateTime.now();
+      final birthDate = pet.dateOfBirth!;
+      final age = now.year - birthDate.year;
+      if (now.month < birthDate.month || (now.month == birthDate.month && now.day < birthDate.day)) {
+        ageController.text = (age - 1).toString();
+      } else {
+        ageController.text = age.toString();
+      }
+    }
+    
+    // Lista vrsta životinja
+    final List<String> speciesList = [
+      'Pas',
+      'Mačka',
+      'Ptica',
+      'Zec',
+      'Glodar'
+    ];
+    
+    // Ako trenutna vrsta nije u listi, dodaj je
+    if (selectedSpecies != null && 
+        selectedSpecies!.isNotEmpty && 
+        !speciesList.contains(selectedSpecies)) {
+      speciesList.insert(0, selectedSpecies!);
+    }
 
     showDialog(
       context: context,
@@ -1091,13 +1214,28 @@ class _PetsScreenState extends State<PetsScreen> {
                             ),
                             const SizedBox(width: 16),
                             Expanded(
-                              child: TextFormField(
-                                controller: speciesController,
+                              child: DropdownButtonFormField<String>(
+                                value: selectedSpecies,
                                 decoration: const InputDecoration(
                                   labelText: 'Vrsta *',
                                   border: OutlineInputBorder(),
                                   prefixIcon: Icon(Icons.category),
                                 ),
+                                items: speciesList.map((species) {
+                                  return DropdownMenuItem<String>(
+                                    value: species,
+                                    child: Text(species),
+                                  );
+                                }).toList(),
+                                onChanged: (value) {
+                                  setDialogState(() => selectedSpecies = value);
+                                },
+                                validator: (value) {
+                                  if (value == null || value.isEmpty) {
+                                    return 'Molimo izaberite vrstu';
+                                  }
+                                  return null;
+                                },
                               ),
                             ),
                           ],
@@ -1181,6 +1319,32 @@ class _PetsScreenState extends State<PetsScreen> {
                             ),
                             const SizedBox(width: 16),
                             Expanded(
+                              child: TextFormField(
+                                controller: ageController,
+                                keyboardType: TextInputType.number,
+                                decoration: const InputDecoration(
+                                  labelText: 'Starost (godine)',
+                                  hintText: 'Unesite starost (opcionalno)',
+                                  border: OutlineInputBorder(),
+                                  prefixIcon: Icon(Icons.cake),
+                                ),
+                                validator: (value) {
+                                  if (value != null && value.isNotEmpty) {
+                                    final age = int.tryParse(value);
+                                    if (age == null || age < 0 || age > 50) {
+                                      return 'Unesite valjanu starost (0-50)';
+                                    }
+                                  }
+                                  return null;
+                                },
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 16),
+                        Row(
+                          children: [
+                            Expanded(
                               child: DropdownButtonFormField<PetStatus>(
                                 value: selectedStatus,
                                 decoration: const InputDecoration(
@@ -1188,12 +1352,55 @@ class _PetsScreenState extends State<PetsScreen> {
                                   border: OutlineInputBorder(),
                                   prefixIcon: Icon(Icons.info_outline),
                                 ),
-                                items: PetStatus.values.map((status) {
-                                  return DropdownMenuItem(
-                                    value: status,
-                                    child: Text(status == PetStatus.active ? 'Aktivan' : 'Neaktivan'),
-                                  );
-                                }).toList(),
+                                items: [
+                                  // Prikaži samo Aktivan i Neaktivan (ne prikazuj deceased)
+                                  DropdownMenuItem(
+                                    value: PetStatus.active,
+                                    child: Row(
+                                      children: [
+                                        Container(
+                                          width: 12,
+                                          height: 12,
+                                          decoration: BoxDecoration(
+                                            color: Colors.green,
+                                            shape: BoxShape.circle,
+                                          ),
+                                        ),
+                                        const SizedBox(width: 8),
+                                        Text(
+                                          'Aktivan',
+                                          style: TextStyle(
+                                            color: Colors.green.shade700,
+                                            fontWeight: FontWeight.w500,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  DropdownMenuItem(
+                                    value: PetStatus.inactive,
+                                    child: Row(
+                                      children: [
+                                        Container(
+                                          width: 12,
+                                          height: 12,
+                                          decoration: BoxDecoration(
+                                            color: Colors.red,
+                                            shape: BoxShape.circle,
+                                          ),
+                                        ),
+                                        const SizedBox(width: 8),
+                                        Text(
+                                          'Neaktivan',
+                                          style: TextStyle(
+                                            color: Colors.red.shade700,
+                                            fontWeight: FontWeight.w500,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
                                 onChanged: (value) {
                                   if (value != null) {
                                     setDialogState(() => selectedStatus = value);
@@ -1227,7 +1434,7 @@ class _PetsScreenState extends State<PetsScreen> {
                             ElevatedButton(
                               onPressed: () async {
                                 if (nameController.text.isEmpty || 
-                                    speciesController.text.isEmpty) {
+                                    selectedSpecies == null || selectedSpecies!.isEmpty) {
                                   ScaffoldMessenger.of(context).showSnackBar(
                                     const SnackBar(
                                       content: Text('Molimo unesite obavezna polja (Ime i Vrsta)'),
@@ -1237,19 +1444,65 @@ class _PetsScreenState extends State<PetsScreen> {
                                   return;
                                 }
 
-                                await _updatePet(pet.id, {
+                                // Izračunaj dateOfBirth iz unesene starosti
+                                DateTime? dateOfBirth;
+                                if (ageController.text.isNotEmpty) {
+                                  final age = int.tryParse(ageController.text);
+                                  if (age != null && age >= 0) {
+                                    final now = DateTime.now();
+                                    dateOfBirth = DateTime(now.year - age, now.month, now.day);
+                                  }
+                                }
+
+                                // Optimistički update - ažuriraj pacijenta u listi odmah
+                                final updatedPet = Pet(
+                                  id: pet.id,
+                                  name: nameController.text,
+                                  species: selectedSpecies!,
+                                  breed: breedController.text.isEmpty ? null : breedController.text,
+                                  gender: selectedGender!,
+                                  dateOfBirth: dateOfBirth,
+                                  weight: weightController.text.isEmpty ? null : double.tryParse(weightController.text),
+                                  color: colorController.text.isEmpty ? null : colorController.text,
+                                  microchipNumber: microchipController.text.isEmpty ? null : microchipController.text,
+                                  status: selectedStatus!,
+                                  notes: notesController.text.isEmpty ? null : notesController.text,
+                                  ownerId: pet.ownerId,
+                                  ownerName: pet.ownerName,
+                                  createdAt: pet.createdAt,
+                                  updatedAt: DateTime.now(),
+                                );
+                                
+                                // Ažuriraj pacijenta u listi i osvježi UI odmah
+                                final index = _pets.indexWhere((p) => p.id == pet.id);
+                                if (index != -1) {
+                                  // Kreiraj novu listu da Flutter detektira promjenu i rebuild-uje UI
+                                  setState(() {
+                                    _pets = List.from(_pets)..[index] = updatedPet;
+                                  });
+                                }
+                                
+                                // Zatvori dijalog odmah
+                                if (mounted) {
+                                  Navigator.of(context).pop();
+                                }
+                                
+                                // Zatim pozovi API za ažuriranje u pozadini (skipReload jer smo već napravili optimistički update)
+                                // Ako API uspije, ažuriraj podatke iz odgovora (osigurava da su podaci sinkronizirani)
+                                _updatePet(pet.id, {
                                   'name': nameController.text,
-                                  'species': speciesController.text,
+                                  'species': selectedSpecies!,
                                   'breed': breedController.text.isEmpty ? null : breedController.text,
                                   'gender': selectedGender == PetGender.male ? 1 : 2,
                                   'weight': weightController.text.isEmpty ? null : double.tryParse(weightController.text),
                                   'color': colorController.text.isEmpty ? null : colorController.text,
                                   'notes': notesController.text.isEmpty ? null : notesController.text,
                                   'microchipNumber': microchipController.text.isEmpty ? null : microchipController.text,
-                                  'status': selectedStatus == PetStatus.active ? 1 : 2,
-                                  'dateOfBirth': selectedBirthDate?.toIso8601String(),
-                                });
-                                Navigator.of(context).pop();
+                                  'status': selectedStatus == PetStatus.active 
+                                      ? 1 
+                                      : (selectedStatus == PetStatus.inactive ? 2 : 3),
+                                  'dateOfBirth': dateOfBirth?.toIso8601String(),
+                                }, skipReload: true);
                               },
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: const Color(0xFF2E7D32),
@@ -1271,32 +1524,53 @@ class _PetsScreenState extends State<PetsScreen> {
     );
   }
 
-  Future<void> _updatePet(int petId, Map<String, dynamic> data) async {
+  Future<void> _updatePet(int petId, Map<String, dynamic> data, {bool skipReload = false}) async {
     try {
-      await serviceLocator.apiClient.updatePet(petId, data);
+      final updatedPetData = await serviceLocator.apiClient.updatePet(petId, data);
       
-      await _loadPets(); // Reload pets
+      // Ako nije optimistički update, reload pets
+      if (!skipReload) {
+        await _loadPets();
+      } else {
+        // Ako je optimistički update, ažuriraj podatke iz API odgovora (osigurava da su podaci sinkronizirani, posebno status)
+        if (updatedPetData != null) {
+          setState(() {
+            final index = _pets.indexWhere((p) => p.id == petId);
+            if (index != -1) {
+              _pets[index] = updatedPetData; // Ažuriraj sa podacima iz API-ja (osigurava da je status pravilno postavljen)
+            }
+          });
+        }
+      }
       
       // Pozovi callback za refresh dashboard-a
       if (widget.onPetCreated != null) {
         widget.onPetCreated!();
       }
       
-      if (mounted) {
+      if (mounted && !skipReload) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('✅ Pacijent je uspešno ažuriran'),
             backgroundColor: Colors.green,
+            duration: Duration(seconds: 2),
           ),
         );
       }
     } catch (e) {
       print('❌ Error updating pet: $e');
+      
+      // Ako je optimistički update i došlo je do greške, reload pets da vratimo originalne podatke
+      if (skipReload) {
+        await _loadPets();
+      }
+      
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('❌ Greška pri ažuriranju: $e'),
             backgroundColor: Colors.red,
+            duration: const Duration(seconds: 3),
           ),
         );
       }

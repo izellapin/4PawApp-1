@@ -814,6 +814,9 @@ namespace eVeterinarskaStanicaServices.Migrations
                     b.Property<int>("Gender")
                         .HasColumnType("int");
 
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("bit");
+
                     b.Property<string>("MicrochipNumber")
                         .HasMaxLength(50)
                         .HasColumnType("nvarchar(50)");
@@ -1198,6 +1201,42 @@ namespace eVeterinarskaStanicaServices.Migrations
                     b.HasIndex("VeterinarianId");
 
                     b.ToTable("ServiceAvailability");
+                });
+
+            modelBuilder.Entity("eVeterinarskaStanicaModel.ServiceSpeciesPrice", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("DateCreated")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime?>("DateModified")
+                        .HasColumnType("datetime2");
+
+                    b.Property<decimal?>("DiscountPrice")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<decimal>("Price")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<int>("ServiceId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Species")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ServiceId", "Species")
+                        .IsUnique();
+
+                    b.ToTable("ServiceSpeciesPrices");
                 });
 
             modelBuilder.Entity("eVeterinarskaStanicaModel.ShoppingCart", b =>
@@ -1746,6 +1785,17 @@ namespace eVeterinarskaStanicaServices.Migrations
                     b.Navigation("Veterinarian");
                 });
 
+            modelBuilder.Entity("eVeterinarskaStanicaModel.ServiceSpeciesPrice", b =>
+                {
+                    b.HasOne("eVeterinarskaStanicaModel.Service", "Service")
+                        .WithMany("ServiceSpeciesPrices")
+                        .HasForeignKey("ServiceId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Service");
+                });
+
             modelBuilder.Entity("eVeterinarskaStanicaModel.ShoppingCart", b =>
                 {
                     b.HasOne("eVeterinarskaStanicaModel.User", "User")
@@ -1835,6 +1885,8 @@ namespace eVeterinarskaStanicaServices.Migrations
                     b.Navigation("Reviews");
 
                     b.Navigation("ServiceAvailabilities");
+
+                    b.Navigation("ServiceSpeciesPrices");
                 });
 
             modelBuilder.Entity("eVeterinarskaStanicaModel.ShoppingCart", b =>

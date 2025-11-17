@@ -1,4 +1,5 @@
 using System;
+using System.Text.Json.Serialization;
 
 namespace eVeterinarskaStanicaModel.DTOs
 {
@@ -11,9 +12,21 @@ namespace eVeterinarskaStanicaModel.DTOs
         public string EndTime { get; set; } = string.Empty;
         public int Type { get; set; }
         public int Status { get; set; }
+        
+        [JsonPropertyName("petId")]
+        public int PetId { get; set; }
+        
         public string PetName { get; set; } = string.Empty;
+        
+        [JsonPropertyName("veterinarianId")]
+        public int VeterinarianId { get; set; }
+        
         public string OwnerName { get; set; } = string.Empty;
         public string VeterinarianName { get; set; } = string.Empty;
+        
+        [JsonPropertyName("serviceId")]
+        public int? ServiceId { get; set; }
+        
         public string? ServiceName { get; set; }
         public decimal? EstimatedCost { get; set; }
         public decimal? ActualCost { get; set; }

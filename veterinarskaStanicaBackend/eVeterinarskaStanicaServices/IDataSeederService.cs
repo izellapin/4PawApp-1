@@ -8,5 +8,6 @@ namespace eVeterinarskaStanicaServices
         Task SeedAdminUserAsync();
         Task SeedCategoriesAsync();
         Task SeedServicesAsync();
+        Task SeedServiceSpeciesPricesAsync();
     }
 }

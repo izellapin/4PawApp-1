@@ -75,5 +75,6 @@ namespace eVeterinarskaStanicaModel
         public virtual ICollection<CartItem> CartItems { get; set; } = new List<CartItem>();
         public virtual ICollection<Favorite> Favorites { get; set; } = new List<Favorite>();
         public virtual ICollection<ServiceAvailability> ServiceAvailabilities { get; set; } = new List<ServiceAvailability>();
+        public virtual ICollection<ServiceSpeciesPrice> ServiceSpeciesPrices { get; set; } = new List<ServiceSpeciesPrice>();
     }
 }

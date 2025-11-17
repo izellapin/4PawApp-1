@@ -361,23 +361,21 @@ class _LoginScreenState extends State<LoginScreen> {
                       ),
                       const SizedBox(height: 40),
                       
-                      // Email field
+                      // Email or Username field
                       TextFormField(
                         controller: _emailController,
                         decoration: InputDecoration(
-                          labelText: 'E-mail',
-                          prefixIcon: const Icon(Icons.email),
+                          labelText: 'E-mail ili korisničko ime',
+                          hintText: 'Unesite email ili username',
+                          prefixIcon: const Icon(Icons.person),
                           border: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(12),
                           ),
                         ),
-                        keyboardType: TextInputType.emailAddress,
+                        keyboardType: TextInputType.text,
                         validator: (value) {
                           if (value == null || value.isEmpty) {
-                            return 'Unesite e-mail';
-                          }
-                          if (!value.contains('@')) {
-                            return 'Unesite valjan e-mail';
+                            return 'Unesite e-mail ili korisničko ime';
                           }
                           return null;
                         },

@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Filters;
 using System.Security.Claims;
 using eVeterinarskaStanicaModel;
+using Microsoft.Extensions.Logging;
 
 namespace veterinarskaStanica.WebAPI.Authorization
 {
@@ -27,18 +28,38 @@ namespace veterinarskaStanica.WebAPI.Authorization
             // Get user role from claims
             var roleClaim = context.HttpContext.User.FindFirst(ClaimTypes.Role)?.Value;
             
-            if (string.IsNullOrEmpty(roleClaim) || !Enum.TryParse<UserRole>(roleClaim, out var userRole))
+            // Log for debugging
+            var logger = context.HttpContext.RequestServices.GetService<ILogger<RoleRequiredAttribute>>();
+            logger?.LogInformation("RoleRequired check - Role claim: {RoleClaim}, Required roles: {RequiredRoles}", 
+                roleClaim, string.Join(", ", _requiredRoles));
+            
+            if (string.IsNullOrEmpty(roleClaim))
             {
+                logger?.LogWarning("Role claim is null or empty");
                 context.Result = new ForbidResult();
                 return;
             }
 
-            // Check if user has required role
-            if (!_requiredRoles.Contains(userRole))
+            // Try to parse role (case-insensitive)
+            if (!Enum.TryParse<UserRole>(roleClaim, ignoreCase: true, out var userRole))
             {
+                logger?.LogWarning("Failed to parse role claim '{RoleClaim}' as UserRole enum", roleClaim);
                 context.Result = new ForbidResult();
                 return;
             }
+
+            logger?.LogInformation("Parsed user role: {UserRole}", userRole);
+
+            // Check if user has required role
+            if (!_requiredRoles.Contains(userRole))
+            {
+                logger?.LogWarning("User role {UserRole} is not in required roles: {RequiredRoles}", 
+                    userRole, string.Join(", ", _requiredRoles));
+                context.Result = new ForbidResult();
+                return;
+            }
+
+            logger?.LogInformation("Authorization successful - User role {UserRole} is authorized", userRole);
         }
     }
 

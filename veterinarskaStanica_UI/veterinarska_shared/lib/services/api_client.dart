@@ -6,6 +6,7 @@ import '../models/auth.dart';
 import '../models/pet.dart';
 import '../models/appointment.dart';
 import 'network_config.dart';
+import 'service_locator.dart';
 
 class ApiClient {
   late final Dio dio;
@@ -60,8 +61,23 @@ class ApiClient {
               return;
             }
           } else {
-            print('Token refresh failed - user needs to login again');
-            
+            print('Token refresh failed - logging out and redirecting to login');
+            // Logout korisnika - ovo će automatski triggerovati AuthWrapper da prikaže login ekran
+            try {
+              // Koristimo lazy pristup da izbjegnemo circular dependency
+              if (serviceLocator.isInitialized) {
+                final authService = serviceLocator.authService;
+                await authService.logout();
+                print('User logged out due to expired token');
+              } else {
+                print('ServiceLocator not initialized, clearing tokens only');
+                await _clearTokens();
+              }
+            } catch (e) {
+              print('Error during logout: $e');
+              // Fallback: samo obriši tokene
+              await _clearTokens();
+            }
           }
         }
         handler.next(error);
@@ -120,12 +136,13 @@ class ApiClient {
     }
   }
 
-  Future<AuthResponse> login(String email, String password) async {
+  Future<AuthResponse> login(String emailOrUsername, String password, {String? clientType}) async {
     try {
-      print('Attempting login for: $email');
+      print('Attempting login for: $emailOrUsername');
       final response = await dio.post('/auth/login', data: {
-        'email': email,
+        'emailOrUsername': emailOrUsername,
         'password': password,
+        if (clientType != null) 'clientType': clientType,
       });
       
       print('Login response status: ${response.statusCode}');
@@ -329,39 +346,170 @@ class ApiClient {
   Future<Pet> updatePet(int id, Map<String, dynamic> data) async {
     try {
       print('Updating pet $id with data: $data');
-      // Mobile users (pet owners) update their own pets via /pets/my/{id}
-      final response = await dio.put('/pets/my/$id', data: data);
       
-      print('Response status: ${response.statusCode}');
-      print('Response data type: ${response.data.runtimeType}');
-      print('Response data: $response.data');
-      
-      if (response.statusCode != 200) {
-        final resp = response.data;
-        if (resp is Map<String, dynamic>) {
-          throw ApiError(message: resp['message'] ?? 'Update failed', statusCode: response.statusCode);
-        } else if (resp is String) {
-          throw ApiError(message: resp, statusCode: response.statusCode);
+      // Prvo pokušaj sa /pets/my/{id} endpoint (za PetOwner korisnike)
+      // Ako dobije 403, pokušaj sa /pets/{id} (za veterinare i admine)
+      try {
+        final response = await dio.put('/pets/my/$id', data: data);
+        
+        print('Response status: ${response.statusCode}');
+        print('Response data type: ${response.data.runtimeType}');
+        print('Response data: $response.data');
+        
+        // Ako je status code 403 ili 404, pokušaj sa /pets/{id} endpoint
+        if (response.statusCode == 403 || response.statusCode == 404) {
+          print('🔍 Got ${response.statusCode} from /pets/my/$id (non-exception), trying /pets/$id');
+          print('🔍 First error response data: ${response.data}');
+          print('🔍 First error response data type: ${response.data.runtimeType}');
+          
+          // Provjeri da li postoji authorization token
+          final headers = dio.options.headers;
+          print('🔍 Request headers keys: ${headers.keys.toList()}');
+          print('🔍 Authorization header present: ${headers.containsKey('Authorization')}');
+          if (headers.containsKey('Authorization')) {
+            final authHeader = headers['Authorization'];
+            print('🔍 Authorization header value: ${authHeader.toString().substring(0, authHeader.toString().length > 50 ? 50 : authHeader.toString().length)}...');
+          }
+          
+          print('🔍 Sending PUT request to /pets/$id with data: $data');
+          try {
+            final secondResponse = await dio.put('/pets/$id', data: data);
+            
+            print('✅ Response status from /pets/$id: ${secondResponse.statusCode}');
+            print('✅ Response data type: ${secondResponse.data.runtimeType}');
+            print('✅ Response data: $secondResponse.data');
+            
+            if (secondResponse.statusCode == 200) {
+              if (secondResponse.data == null) {
+                throw ApiError(message: 'Prazan odgovor sa servera');
+              }
+              
+              if (secondResponse.data is! Map<String, dynamic>) {
+                throw ApiError(message: 'Neocekivani format odgovora: ${secondResponse.data.runtimeType}');
+              }
+              
+              return Pet.fromJson(secondResponse.data);
+            } else {
+              // Ako status code nije 200, baci grešku
+              final resp = secondResponse.data;
+              String errorMessage = 'Update failed';
+              if (resp is Map<String, dynamic>) {
+                errorMessage = resp['message'] ?? resp['error'] ?? resp['title'] ?? 'Update failed';
+              } else if (resp is String) {
+                errorMessage = resp;
+              }
+              print('❌ Error message from response: $errorMessage');
+              throw ApiError(message: errorMessage, statusCode: secondResponse.statusCode);
+            }
+          } on DioException catch (e2) {
+            // Ako i /pets/$id baca DioException (npr. 403)
+            print('❌ Got DioException from /pets/$id: ${e2.message}');
+            print('❌ Response status: ${e2.response?.statusCode}');
+            print('❌ Response data: ${e2.response?.data}');
+            print('❌ Response data type: ${e2.response?.data?.runtimeType}');
+            
+            final resp = e2.response?.data;
+            String errorMessage = 'Update failed - 403 Forbidden. Provjerite da li ste ulogovani kao Admin ili Veterinarian.';
+            if (resp is Map<String, dynamic>) {
+              errorMessage = resp['message'] ?? resp['error'] ?? resp['title'] ?? errorMessage;
+            } else if (resp is String) {
+              errorMessage = resp.isNotEmpty ? resp : errorMessage;
+            }
+            print('❌ Final error message: $errorMessage');
+            throw ApiError(message: errorMessage, statusCode: e2.response?.statusCode ?? 403);
+          }
+        }
+        
+        if (response.statusCode == 200) {
+          if (response.data == null) {
+            throw ApiError(message: 'Prazan odgovor sa servera');
+          }
+          
+          if (response.data is! Map<String, dynamic>) {
+            throw ApiError(message: 'Neocekivani format odgovora: ${response.data.runtimeType}');
+          }
+          
+          return Pet.fromJson(response.data);
+        }
+      } on DioException catch (e) {
+        // Ako je 403 ili 404, pokušaj sa /pets/{id} endpoint
+        if (e.response?.statusCode == 403 || e.response?.statusCode == 404) {
+          print('🔍 Got ${e.response?.statusCode} from /pets/my/$id, trying /pets/$id');
+          print('🔍 First error response data: ${e.response?.data}');
+          print('🔍 First error response data type: ${e.response?.data.runtimeType}');
+          print('🔍 First error response headers: ${e.response?.headers}');
+          
+          try {
+            // Provjeri da li postoji authorization token
+            final headers = dio.options.headers;
+            print('🔍 Request headers keys: ${headers.keys.toList()}');
+            print('🔍 Authorization header present: ${headers.containsKey('Authorization')}');
+            if (headers.containsKey('Authorization')) {
+              final authHeader = headers['Authorization'];
+              print('🔍 Authorization header value: ${authHeader.toString().substring(0, authHeader.toString().length > 50 ? 50 : authHeader.toString().length)}...');
+            }
+            
+            print('🔍 Sending PUT request to /pets/$id with data: $data');
+            final response = await dio.put('/pets/$id', data: data);
+            
+            print('Response status: ${response.statusCode}');
+            print('Response data type: ${response.data.runtimeType}');
+            print('Response data: $response.data');
+            
+            if (response.statusCode == 200) {
+              if (response.data == null) {
+                throw ApiError(message: 'Prazan odgovor sa servera');
+              }
+              
+              if (response.data is! Map<String, dynamic>) {
+                throw ApiError(message: 'Neocekivani format odgovora: ${response.data.runtimeType}');
+              }
+              
+              return Pet.fromJson(response.data);
+            } else {
+              // Ako status code nije 200, baci grešku
+              final resp = response.data;
+              String errorMessage = 'Update failed';
+              if (resp is Map<String, dynamic>) {
+                errorMessage = resp['message'] ?? resp['error'] ?? resp['title'] ?? 'Update failed';
+              } else if (resp is String) {
+                errorMessage = resp;
+              }
+              print('Error message from response: $errorMessage');
+              throw ApiError(message: errorMessage, statusCode: response.statusCode);
+            }
+          } on DioException catch (e2) {
+            // Ako i /pets/$id baca DioException (npr. 403)
+            print('Got DioException from /pets/$id: ${e2.message}');
+            print('Response status: ${e2.response?.statusCode}');
+            print('Response data: ${e2.response?.data}');
+            print('Response data type: ${e2.response?.data?.runtimeType}');
+            print('Response headers: ${e2.response?.headers}');
+            
+            final resp = e2.response?.data;
+            String errorMessage = 'Update failed - 403 Forbidden. Provjerite da li ste ulogovani kao Admin ili Veterinarian.';
+            if (resp is Map<String, dynamic>) {
+              errorMessage = resp['message'] ?? resp['error'] ?? resp['title'] ?? errorMessage;
+            } else if (resp is String) {
+              errorMessage = resp.isNotEmpty ? resp : errorMessage;
+            }
+            print('Final error message: $errorMessage');
+            throw ApiError(message: errorMessage, statusCode: e2.response?.statusCode ?? 403);
+          }
         } else {
-          throw ApiError(message: 'Update failed', statusCode: response.statusCode);
+          // Ako nije 403 ili 404, baci grešku
+          print('Update pet error: ${e.message}');
+          print('Response: ${e.response?.data}');
+          print('Status code: ${e.response?.statusCode}');
+          throw _handleError(e);
         }
       }
       
-      if (response.data == null) {
-        throw ApiError(message: 'Prazan odgovor sa servera');
-      }
-      
-      if (response.data is! Map<String, dynamic>) {
-        throw ApiError(message: 'Neocekivani format odgovora: ${response.data.runtimeType}');
-      }
-      
-      return Pet.fromJson(response.data);
-    } on DioException catch (e) {
-      print('Update pet error: ${e.message}');
-      print('Response: ${e.response?.data}');
-      print('Status code: ${e.response?.statusCode}');
-      throw _handleError(e);
+      throw ApiError(message: 'Update failed');
     } catch (e) {
+      if (e is ApiError) {
+        rethrow;
+      }
       print('Unexpected error in updatePet: $e');
       throw ApiError(message: e.toString());
     }
@@ -369,12 +517,26 @@ class ApiClient {
 
   Future<void> deletePet(int id) async {
     try {
-      // Mobile users (pet owners) delete their own pets via /pets/my/{id}
-      final response = await dio.delete('/pets/my/$id');
+      // Prvo pokušaj sa /pets/{id} (za admin/veterinar)
+      try {
+        final response = await dio.delete('/pets/$id');
+        print('✅ Pet deleted successfully via /pets/$id');
+        return;
+      } on DioException catch (e) {
+        // Ako je 403 ili 404, pokušaj sa /pets/my/{id} (za pet owners)
+        if (e.response?.statusCode == 403 || e.response?.statusCode == 404) {
+          print('⚠️ Got ${e.response?.statusCode} from /pets/$id, trying /pets/my/$id');
+          final response = await dio.delete('/pets/my/$id');
+          print('✅ Pet deleted successfully via /pets/my/$id');
+          return;
+        }
+        // Ako nije 403/404, re-throw grešku
+        rethrow;
+      }
     } on DioException catch (e) {
-      print('Delete pet error: ${e.message}');
-      print('Response: ${e.response?.data}');
-      print('Status code: ${e.response?.statusCode}');
+      print('❌ Delete pet error: ${e.message}');
+      print('❌ Response: ${e.response?.data}');
+      print('❌ Status code: ${e.response?.statusCode}');
       throw _handleError(e);
     }
   }
@@ -382,8 +544,35 @@ class ApiClient {
   Future<List<Appointment>> getAppointments() async {
     try {
       final response = await dio.get('/appointments');
-      return (response.data as List).map((json) => Appointment.fromJson(json)).toList();
+      print('📅 [API CLIENT] getAppointments response status: ${response.statusCode}');
+      print('📅 [API CLIENT] Response data type: ${response.data.runtimeType}');
+      
+      if (response.data is List && (response.data as List).isNotEmpty) {
+        final firstItem = (response.data as List)[0];
+        print('📅 [API CLIENT] First appointment JSON keys: ${firstItem is Map ? firstItem.keys.toList() : 'not a map'}');
+        if (firstItem is Map) {
+          print('📅 [API CLIENT] First appointment petId from JSON: ${firstItem['petId']} (type: ${firstItem['petId']?.runtimeType})');
+          print('📅 [API CLIENT] First appointment PetId (PascalCase) from JSON: ${firstItem['PetId']} (type: ${firstItem['PetId']?.runtimeType})');
+          print('📅 [API CLIENT] First appointment full JSON: $firstItem');
+          
+          // Try both camelCase and PascalCase
+          final petIdValue = firstItem['petId'] ?? firstItem['PetId'];
+          print('📅 [API CLIENT] petId value (trying both): $petIdValue');
+        }
+      }
+      
+      final appointments = (response.data as List).map((json) {
+        print('📅 [API CLIENT] Parsing appointment JSON: $json');
+        final appointment = Appointment.fromJson(json);
+        print('📅 [API CLIENT] Parsed appointment ID: ${appointment.id}, petId: ${appointment.petId}');
+        return appointment;
+      }).toList();
+      
+      print('📅 [API CLIENT] Total appointments parsed: ${appointments.length}');
+      return appointments;
     } on DioException catch (e) {
+      print('❌ [API CLIENT] getAppointments error: ${e.message}');
+      print('❌ [API CLIENT] Response: ${e.response?.data}');
       throw _handleError(e);
     }
   }
@@ -472,18 +661,38 @@ class ApiClient {
   }
 
   Future<void> markAppointmentAsPaid(int appointmentId, {String? paymentMethod, String? transactionId}) async {
+    print('💳 [API CLIENT] Marking appointment as paid...');
+    print('💳 [API CLIENT] Appointment ID: $appointmentId');
+    print('💳 [API CLIENT] Payment method: ${paymentMethod ?? 'Stripe'}');
+    print('💳 [API CLIENT] Transaction ID: $transactionId');
+    
     try {
-      print('Marking appointment $appointmentId as paid');
-      await dio.patch('/appointments/$appointmentId/mark-paid', data: {
+      final requestData = {
         'paymentMethod': paymentMethod ?? 'Stripe',
         'paymentTransactionId': transactionId,
-      });
-      print('Appointment marked as paid successfully');
+        // Amount se ne šalje jer backend automatski određuje iz Service ili EstimatedCost
+      };
+      print('💳 [API CLIENT] Request data: $requestData');
+      print('💳 [API CLIENT] Sending PATCH request to /appointments/$appointmentId/mark-paid');
+      
+      final response = await dio.patch('/appointments/$appointmentId/mark-paid', data: requestData);
+      
+      print('✅ [API CLIENT] Appointment marked as paid successfully');
+      print('💳 [API CLIENT] Response status: ${response.statusCode}');
+      print('💳 [API CLIENT] Response data: ${response.data}');
     } on DioException catch (e) {
-      print('Mark as paid error: ${e.message}');
-      print('Response data: ${e.response?.data}');
-      print('Status code: ${e.response?.statusCode}');
+      print('❌ [API CLIENT] Mark as paid error occurred');
+      print('❌ [API CLIENT] Error message: ${e.message}');
+      print('❌ [API CLIENT] Error type: ${e.type}');
+      print('❌ [API CLIENT] Response status: ${e.response?.statusCode}');
+      print('❌ [API CLIENT] Response data: ${e.response?.data}');
+      print('❌ [API CLIENT] Request path: ${e.requestOptions.path}');
+      print('❌ [API CLIENT] Request data: ${e.requestOptions.data}');
       throw _handleError(e);
+    } catch (e) {
+      print('❌ [API CLIENT] Unexpected error marking appointment as paid: $e');
+      print('❌ [API CLIENT] Error type: ${e.runtimeType}');
+      rethrow;
     }
   }
 
@@ -557,26 +766,55 @@ class ApiClient {
   }
 
 
-  Future<List<Map<String, dynamic>>> getServices() async {
+  Future<List<Map<String, dynamic>>> getServices({String? species}) async {
     try {
-      print('Fetching services...');
-      final response = await dio.get('/Service');
-      print('Services response status: ${response.statusCode}');
-      print('Services response data type: ${response.data.runtimeType}');
+      print('🔍 [API] Fetching services...');
+      if (species != null) {
+        print('🔍 [API] Species parameter: "$species"');
+        print('🔍 [API] Encoded species: "${Uri.encodeComponent(species)}"');
+      }
+      final url = species != null 
+          ? '/Service?species=${Uri.encodeComponent(species)}'
+          : '/Service';
+      print('🔍 [API] Full URL: $url');
+      final response = await dio.get(url);
+      print('✅ [API] Services response status: ${response.statusCode}');
+      print('✅ [API] Services response data type: ${response.data.runtimeType}');
       if (response.data is List) {
-        return List<Map<String, dynamic>>.from(response.data);
+        final services = List<Map<String, dynamic>>.from(response.data);
+        print('✅ [API] Received ${services.length} services');
+        if (services.isNotEmpty && species != null) {
+          print('💰 [API] First service price for species "$species": ${services[0]['price']}');
+        }
+        return services;
       } else {
-        print('Services response is not a List, it is: ${response.data}');
+        print('❌ [API] Services response is not a List, it is: ${response.data}');
         return [];
       }
     } on DioException catch (e) {
-      print('Get services error: ${e.message}');
-      print('Get services error response: ${e.response?.data}');
-      print('Get services error status: ${e.response?.statusCode}');
+      print('❌ [API] Get services error: ${e.message}');
+      print('❌ [API] Get services error response: ${e.response?.data}');
+      print('❌ [API] Get services error status: ${e.response?.statusCode}');
       throw _handleError(e);
     } catch (e) {
-      print('Get services unexpected error: $e');
+      print('❌ [API] Get services unexpected error: $e');
       rethrow;
+    }
+  }
+
+  Future<Map<String, dynamic>?> getService(int id, {String? species}) async {
+    try {
+      final url = species != null 
+          ? '/Service/$id?species=${Uri.encodeComponent(species)}'
+          : '/Service/$id';
+      final response = await dio.get(url);
+      if (response.statusCode == 200) {
+        return Map<String, dynamic>.from(response.data);
+      }
+      return null;
+    } on DioException catch (e) {
+      print('Get service error: ${e.message}');
+      throw _handleError(e);
     }
   }
 

@@ -51,14 +51,23 @@ namespace eVeterinarskaStanicaServices
         {
             try
             {
-                var user = await _context.Users
-                    .FirstOrDefaultAsync(u => u.Email == request.Email && u.IsActive);
+                // Provjeri da li je uneseno email ili username
+                var emailOrUsername = request.EmailOrUsername.Trim();
+                var isEmail = emailOrUsername.Contains("@");
+                
+                var user = isEmail
+                    ? await _context.Users.FirstOrDefaultAsync(u => u.Email == emailOrUsername && u.IsActive)
+                    : await _context.Users.FirstOrDefaultAsync(u => u.Username == emailOrUsername && u.IsActive);
 
                 if (user == null)
-                    return ServiceResult<AuthResponse>.ErrorResult("Invalid email or password");
+                    return ServiceResult<AuthResponse>.ErrorResult("Invalid email/username or password");
 
                 if (!_hashingService.VerifyPassword(request.Password, user.PasswordHash, user.PasswordSalt))
-                    return ServiceResult<AuthResponse>.ErrorResult("Invalid email or password");
+                    return ServiceResult<AuthResponse>.ErrorResult("Invalid email/username or password");
+
+                // Log for debugging
+                _logger?.LogInformation("Login attempt for {Email} - IsEmailVerified: {IsVerified}, IsActive: {IsActive}, Role: {Role}, ClientType: {ClientType}", 
+                    user.Email, user.IsEmailVerified, user.IsActive, user.Role, request.ClientType ?? "null");
 
                 // Send email verification only for mobile users (not for desktop/veterinarians)
                 // Also check if we already sent a verification code recently (within last 5 minutes)
@@ -70,7 +79,8 @@ namespace eVeterinarskaStanicaServices
                 var isMobileClient = string.IsNullOrEmpty(request.ClientType) || 
                                    request.ClientType.Equals("Mobile", StringComparison.OrdinalIgnoreCase);
                 
-                if (!user.IsEmailVerified)
+                // Only block mobile clients if email is not verified
+                if (!user.IsEmailVerified && isMobileClient)
                 {
                     try
                     {
@@ -327,14 +337,19 @@ namespace eVeterinarskaStanicaServices
         {
             try
             {
-                var user = await _context.Users
-                    .FirstOrDefaultAsync(u => u.Email == request.Email && u.IsActive);
+                // Provjeri da li je uneseno email ili username
+                var emailOrUsername = request.EmailOrUsername.Trim();
+                var isEmail = emailOrUsername.Contains("@");
+                
+                var user = isEmail
+                    ? await _context.Users.FirstOrDefaultAsync(u => u.Email == emailOrUsername && u.IsActive)
+                    : await _context.Users.FirstOrDefaultAsync(u => u.Username == emailOrUsername && u.IsActive);
 
                 if (user == null)
-                    return ServiceResult<Login2FAResponse>.ErrorResult("Invalid email or password");
+                    return ServiceResult<Login2FAResponse>.ErrorResult("Invalid email/username or password");
 
                 if (!_hashingService.VerifyPassword(request.Password, user.PasswordHash, user.PasswordSalt))
-                    return ServiceResult<Login2FAResponse>.ErrorResult("Invalid email or password");
+                    return ServiceResult<Login2FAResponse>.ErrorResult("Invalid email/username or password");
 
                 var code = GenerateTwoFactorCode();
                 var expirationMinutes = int.Parse(_configuration["TwoFactor:CodeExpirationMinutes"] ?? "10");

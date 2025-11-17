@@ -604,3 +604,4 @@ C:\Users\User\Desktop\RS2-4PawApplication-main\veterinarskaStanicaBackend\veteri
 C:\Users\User\Desktop\RS2-4PawApplication-main\veterinarskaStanicaBackend\veterinarskaStanica.WebAPI\obj\Debug\net8.0\veterina.82A988F7.Up2Date
 C:\Users\User\Desktop\RS2-4PawApplication-main\veterinarskaStanicaBackend\veterinarskaStanica.WebAPI\obj\Debug\net8.0\veterinarskaStanica.WebAPI.genruntimeconfig.cache
 C:\Users\User\Desktop\RS2-4PawApplication-main\veterinarskaStanicaBackend\veterinarskaStanica.WebAPI\obj\Debug\net8.0\ref\veterinarskaStanica.WebAPI.dll
+C:\Users\User\Desktop\RS2-4PawApplication-main\veterinarskaStanicaBackend\veterinarskaStanica.WebAPI\obj\Debug\net8.0\veterinarskaStanica.WebAPI.sourcelink.json

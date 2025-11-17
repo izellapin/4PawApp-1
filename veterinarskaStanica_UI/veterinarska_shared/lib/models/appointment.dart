@@ -256,6 +256,15 @@ class Appointment {
         status = AppointmentStatus.scheduled;
       }
 
+      // Debug: Log petId values from JSON
+      final petIdFromJson = json['petId'] ?? json['PetId'];
+      final petIdValue = json['petId'];
+      final petIdPascalValue = json['PetId'];
+      print('🔍 [APPOINTMENT FROMJSON] petId from JSON: $petIdFromJson (type: ${petIdFromJson?.runtimeType})');
+      print('🔍 [APPOINTMENT FROMJSON] json keys: ${json.keys.toList()}');
+      print('🔍 [APPOINTMENT FROMJSON] json[petId]: $petIdValue');
+      print('🔍 [APPOINTMENT FROMJSON] json[PetId]: $petIdPascalValue');
+      
       return Appointment(
         id: json['id'] as int,
         appointmentNumber: json['appointmentNumber'] as String? ?? json['number'] as String? ?? '',
@@ -268,15 +277,19 @@ class Appointment {
         notes: json['notes'] as String?,
         estimatedCost: json['estimatedCost'] != null ? (json['estimatedCost'] as num).toDouble() : null,
         actualCost: json['actualCost'] != null ? (json['actualCost'] as num).toDouble() : null,
-        petId: json['petId'] as int? ?? 0,
+        petId: (petIdFromJson != null ? (petIdFromJson as num).toInt() : null) ?? 0,
         petName: json['petName'] as String? ?? json['pet']?['name'] as String?,
-        veterinarianId: json['veterinarianId'] as int? ?? 0,
+        veterinarianId: ((json['veterinarianId'] ?? json['VeterinarianId']) != null ? ((json['veterinarianId'] ?? json['VeterinarianId']) as num).toInt() : null) ?? 0,
         veterinarianName: json['veterinarianName'] as String? ?? 
             (json['veterinarian']?['firstName'] != null 
                 ? '${json['veterinarian']['firstName']} ${json['veterinarian']['lastName']}'
                 : null),
         serviceId: json['serviceId'] as int?,
-        serviceName: json['serviceName'] as String? ?? json['service']?['name'] as String?,
+        serviceName: json['serviceName'] as String? ?? 
+            json['service']?['name'] as String? ??
+            (json['reason'] != null && (json['reason'] as String).isNotEmpty 
+                ? json['reason'] as String 
+                : null),
         ownerName: json['ownerName'] as String? ?? 
             (json['owner']?['firstName'] != null
                 ? '${json['owner']['firstName']} ${json['owner']['lastName']}'

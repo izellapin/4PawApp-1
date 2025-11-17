@@ -713,57 +713,64 @@ class _FinancialDashboardState extends State<FinancialDashboard> {
                       ),
                     ),
                     Expanded(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: chartData.asMap().entries.map((entry) {
-                          final colors = [
-                            const Color(0xFF2196F3), // Plava
-                            const Color(0xFF4CAF50), // Zelena  
-                            const Color(0xFFFF9800), // Narandžasta
-                            const Color(0xFFE91E63), // Roza
-                            const Color(0xFF9C27B0), // Ljubičasta
-                          ];
-                          final service = entry.value.key;
-                          final percentage = entry.value.value;
-                          return Padding(
-                            padding: const EdgeInsets.symmetric(vertical: 4),
-                            child: Row(
-                              children: [
-                                Container(
-                                  width: 12,
-                                  height: 12,
-                                  decoration: BoxDecoration(
-                                    color: colors[entry.key % colors.length],
-                                    shape: BoxShape.circle,
+                      child: SingleChildScrollView(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: chartData.asMap().entries.map((entry) {
+                            final colors = [
+                              const Color(0xFF2196F3), // Plava
+                              const Color(0xFF4CAF50), // Zelena  
+                              const Color(0xFFFF9800), // Narandžasta
+                              const Color(0xFFE91E63), // Roza
+                              const Color(0xFF9C27B0), // Ljubičasta
+                            ];
+                            final service = entry.value.key;
+                            final percentage = entry.value.value;
+                            return Padding(
+                              padding: const EdgeInsets.symmetric(vertical: 4),
+                              child: Row(
+                                children: [
+                                  Container(
+                                    width: 12,
+                                    height: 12,
+                                    decoration: BoxDecoration(
+                                      color: colors[entry.key % colors.length],
+                                      shape: BoxShape.circle,
+                                    ),
                                   ),
-                                ),
-                                const SizedBox(width: 8),
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        service.serviceName,
-                                        style: const TextStyle(
-                                          fontSize: 12,
-                                          fontWeight: FontWeight.w500,
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Text(
+                                          service.serviceName,
+                                          style: const TextStyle(
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.w500,
+                                          ),
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
                                         ),
-                                      ),
-                                      Text(
-                                        '${service.revenue.toStringAsFixed(0)} BAM (${service.count} termina)',
-                                        style: TextStyle(
-                                          fontSize: 10,
-                                          color: Colors.grey[600],
+                                        Text(
+                                          '${service.revenue.toStringAsFixed(0)} BAM (${service.count} termina)',
+                                          style: TextStyle(
+                                            fontSize: 10,
+                                            color: Colors.grey[600],
+                                          ),
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
                                         ),
-                                      ),
-                                    ],
+                                      ],
+                                    ),
                                   ),
-                                ),
-                              ],
-                            ),
-                          );
-                        }).toList(),
+                                ],
+                              ),
+                            );
+                          }).toList(),
+                        ),
                       ),
                     ),
                   ],
@@ -935,6 +942,7 @@ class _FinancialDashboardState extends State<FinancialDashboard> {
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
         children: [
           Text(
             widget.userRole == UserRole.admin 
@@ -943,35 +951,53 @@ class _FinancialDashboardState extends State<FinancialDashboard> {
             style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 16),
-          ...services.map((service) => Padding(
-            padding: const EdgeInsets.symmetric(vertical: 8),
-            child: Row(
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+          ConstrainedBox(
+            constraints: const BoxConstraints(maxHeight: 400),
+            child: SingleChildScrollView(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: services.map((service) => Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 8),
+                  child: Row(
                     children: [
-                      Text(service.serviceName, style: const TextStyle(fontWeight: FontWeight.w500)),
-                      Text('${service.appointmentCount} termina', style: TextStyle(color: Colors.grey[600], fontSize: 12)),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              service.serviceName,
+                              style: const TextStyle(fontWeight: FontWeight.w500),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            Text(
+                              '${service.appointmentCount} termina',
+                              style: TextStyle(color: Colors.grey[600], fontSize: 12),
+                            ),
+                          ],
+                        ),
+                      ),
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            '${service.revenue.toStringAsFixed(0)} BAM',
+                            style: const TextStyle(fontWeight: FontWeight.bold),
+                          ),
+                          Text(
+                            '${service.percentage.toStringAsFixed(0)}%',
+                            style: TextStyle(color: Colors.grey[600], fontSize: 12),
+                          ),
+                        ],
+                      ),
                     ],
                   ),
-                ),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    Text(
-                      '${service.revenue.toStringAsFixed(0)} BAM',
-                      style: const TextStyle(fontWeight: FontWeight.bold),
-                    ),
-                    Text(
-                      '${service.percentage.toStringAsFixed(0)}%',
-                      style: TextStyle(color: Colors.grey[600], fontSize: 12),
-                    ),
-                  ],
-                ),
-              ],
+                )).toList(),
+              ),
             ),
-          )).toList(),
+          ),
         ],
       ),
     );
