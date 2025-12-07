@@ -40,7 +40,26 @@ class _CalendarWidgetState extends State<CalendarWidget> {
   void didUpdateWidget(CalendarWidget oldWidget) {
     super.didUpdateWidget(oldWidget);
     // Update appointments when the widget is rebuilt or appointments list changes
-    if (oldWidget.appointments != widget.appointments) {
+    // Proveri i reference i sadržaj (dužina liste i ID-jevi appointmenta)
+    bool appointmentsChanged = oldWidget.appointments != widget.appointments;
+    if (!appointmentsChanged && oldWidget.appointments.length == widget.appointments.length) {
+      // Proveri da li su se appointmenti promenili po ID-ju i vremenu
+      for (int i = 0; i < widget.appointments.length; i++) {
+        if (i >= oldWidget.appointments.length) {
+          appointmentsChanged = true;
+          break;
+        }
+        final oldApp = oldWidget.appointments[i];
+        final newApp = widget.appointments[i];
+        if (oldApp.id != newApp.id || 
+            oldApp.startTime != newApp.startTime || 
+            oldApp.endTime != newApp.endTime) {
+          appointmentsChanged = true;
+          break;
+        }
+      }
+    }
+    if (appointmentsChanged) {
       _selectedAppointments.value = _getAppointmentsForDay(_selectedDay!);
     }
   }

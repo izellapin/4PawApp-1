@@ -177,6 +177,15 @@ namespace veterinarskaStanica.WebAPI
 
             // app.UseHttpsRedirection(); // Disabled for development to allow HTTP connections
 
+            // Log all HTTP requests for debugging - MUST BE FIRST to catch all requests
+            app.Use(async (context, next) =>
+            {
+                var logger = context.RequestServices.GetRequiredService<ILogger<Program>>();
+                logger.LogInformation("🌐 [HTTP REQUEST] {Method} {Path} - QueryString: {QueryString} - User: {User}, IsAuthenticated: {IsAuth}",
+                    context.Request.Method, context.Request.Path, context.Request.QueryString, context.User?.Identity?.Name, context.User?.Identity?.IsAuthenticated);
+                await next();
+            });
+
             // Add exception handler for better error logging
             app.UseExceptionHandler("/error");
 

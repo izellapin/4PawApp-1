@@ -16,6 +16,9 @@ import 'screens/home/dashboard_screen.dart';
 String? globalStripePublishableKey;
 String? globalStripeSecretKey;
 
+// Globalni RouteObserver za praćenje navigacije
+final RouteObserver<PageRoute> routeObserver = RouteObserver<PageRoute>();
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   
@@ -226,6 +229,7 @@ class MyApp extends StatelessWidget {
           elevation: 0,
         ),
       ),
+        navigatorObservers: [routeObserver],
         home: const AuthWrapper(),
       debugShowCheckedModeBanner: false,
       ),
@@ -269,28 +273,62 @@ class MobileHomeScreen extends StatefulWidget {
 
 class _MobileHomeScreenState extends State<MobileHomeScreen> {
   int _currentIndex = 0;
+  int? _previousIndex;
   
-  final List<Widget> _screens = [
-    const MobileDashboardScreen(),
-    const MobilePetsListScreen(),
-    const MobileAppointmentsListScreen(),
-    const MobileProfileScreen(),
-  ];
+  // GlobalKey za appointments screen da možemo pozvati refresh metodu
+  final GlobalKey _appointmentsKey = GlobalKey();
+  
+  final List<Widget> _screens = [];
 
   @override
   void initState() {
     super.initState();
     _currentIndex = widget.initialIndex;
+    _previousIndex = _currentIndex;
+    
+    // Inicijalizuj ekrane sa key-om za appointments screen
+    _screens.addAll([
+      const MobileDashboardScreen(),
+      const MobilePetsListScreen(),
+      MobileAppointmentsListScreen(key: _appointmentsKey),
+      const MobileProfileScreen(),
+    ]);
+  }
+
+  void _onTabTapped(int index) {
+    setState(() {
+      _previousIndex = _currentIndex;
+      _currentIndex = index;
+    });
+    
+    // Osveži appointments ekran kada se vrati na njega
+    if (index == 2 && _previousIndex != 2) {
+      // Index 2 je appointments ekran
+      print('🔄 [HOME] Switched to appointments tab, triggering refresh...');
+      // Pozovi refresh metodu direktno koristeći dinamički pristup
+      final state = _appointmentsKey.currentState;
+      if (state != null) {
+        // Koristi dinamički pristup jer je klasa privatna
+        try {
+          (state as dynamic).refreshAppointments();
+        } catch (e) {
+          print('⚠️ [HOME] Could not call refreshAppointments: $e');
+        }
+      }
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: _screens[_currentIndex],
+      body: IndexedStack(
+        index: _currentIndex,
+        children: _screens,
+      ),
       bottomNavigationBar: BottomNavigationBar(
         type: BottomNavigationBarType.fixed,
         currentIndex: _currentIndex,
-        onTap: (index) => setState(() => _currentIndex = index),
+        onTap: _onTabTapped,
         selectedItemColor: const Color(0xFF2E7D32),
         unselectedItemColor: Colors.grey,
         items: const [

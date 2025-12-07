@@ -18,24 +18,31 @@ namespace veterinarskaStanica.WebAPI.Authorization
 
         public void OnAuthorization(AuthorizationFilterContext context)
         {
+            var logger = context.HttpContext.RequestServices.GetService<ILogger<RoleRequiredAttribute>>();
+            var method = context.HttpContext.Request.Method;
+            var path = context.HttpContext.Request.Path;
+            
+            logger?.LogInformation("🔐 [ROLE REQUIRED] Authorization check - Method: {Method}, Path: {Path}, Required roles: {RequiredRoles}", 
+                method, path, string.Join(", ", _requiredRoles));
+            
             // Check if user is authenticated
             if (!context.HttpContext.User.Identity?.IsAuthenticated ?? true)
             {
+                logger?.LogWarning("🔐 [ROLE REQUIRED] User not authenticated - Method: {Method}, Path: {Path}", method, path);
                 context.Result = new UnauthorizedResult();
                 return;
             }
 
             // Get user role from claims
             var roleClaim = context.HttpContext.User.FindFirst(ClaimTypes.Role)?.Value;
+            var userIdClaim = context.HttpContext.User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
             
-            // Log for debugging
-            var logger = context.HttpContext.RequestServices.GetService<ILogger<RoleRequiredAttribute>>();
-            logger?.LogInformation("RoleRequired check - Role claim: {RoleClaim}, Required roles: {RequiredRoles}", 
-                roleClaim, string.Join(", ", _requiredRoles));
+            logger?.LogInformation("🔐 [ROLE REQUIRED] User authenticated - UserId: {UserId}, Role claim: {RoleClaim}, Required roles: {RequiredRoles}", 
+                userIdClaim, roleClaim, string.Join(", ", _requiredRoles));
             
             if (string.IsNullOrEmpty(roleClaim))
             {
-                logger?.LogWarning("Role claim is null or empty");
+                logger?.LogWarning("🔐 [ROLE REQUIRED] Role claim is null or empty - Method: {Method}, Path: {Path}", method, path);
                 context.Result = new ForbidResult();
                 return;
             }
@@ -43,23 +50,25 @@ namespace veterinarskaStanica.WebAPI.Authorization
             // Try to parse role (case-insensitive)
             if (!Enum.TryParse<UserRole>(roleClaim, ignoreCase: true, out var userRole))
             {
-                logger?.LogWarning("Failed to parse role claim '{RoleClaim}' as UserRole enum", roleClaim);
+                logger?.LogWarning("🔐 [ROLE REQUIRED] Failed to parse role claim '{RoleClaim}' as UserRole enum - Method: {Method}, Path: {Path}", 
+                    roleClaim, method, path);
                 context.Result = new ForbidResult();
                 return;
             }
 
-            logger?.LogInformation("Parsed user role: {UserRole}", userRole);
+            logger?.LogInformation("🔐 [ROLE REQUIRED] Parsed user role: {UserRole} - Method: {Method}, Path: {Path}", userRole, method, path);
 
             // Check if user has required role
             if (!_requiredRoles.Contains(userRole))
             {
-                logger?.LogWarning("User role {UserRole} is not in required roles: {RequiredRoles}", 
-                    userRole, string.Join(", ", _requiredRoles));
+                logger?.LogWarning("🔐 [ROLE REQUIRED] User role {UserRole} is not in required roles: {RequiredRoles} - Method: {Method}, Path: {Path}", 
+                    userRole, string.Join(", ", _requiredRoles), method, path);
                 context.Result = new ForbidResult();
                 return;
             }
 
-            logger?.LogInformation("Authorization successful - User role {UserRole} is authorized", userRole);
+            logger?.LogInformation("🔐 [ROLE REQUIRED] ✅ Authorization successful - User role {UserRole} is authorized - Method: {Method}, Path: {Path}", 
+                userRole, method, path);
         }
     }
 

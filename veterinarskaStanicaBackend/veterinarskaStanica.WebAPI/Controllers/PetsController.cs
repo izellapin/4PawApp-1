@@ -150,7 +150,7 @@ namespace veterinarskaStanica.WebAPI.Controllers
         {
             var pets = await _context.Pets
                 .Include(p => p.PetOwner)
-                .Where(p => p.PetOwnerId == ownerId && p.Status == PetStatus.Active)
+                .Where(p => p.PetOwnerId == ownerId && !p.IsDeleted && p.Status == PetStatus.Active)
                 .OrderBy(p => p.Name)
                 .ToListAsync();
 
@@ -218,11 +218,24 @@ namespace veterinarskaStanica.WebAPI.Controllers
                 return BadRequest("Nevaljan korisnik ID");
             }
 
+            // Prvo proveri sve pacijente za ovog korisnika (bez filtera)
+            var allPetsForUser = await _context.Pets
+                .Where(p => p.PetOwnerId == userId)
+                .ToListAsync();
+            
+            _logger.LogInformation($"🔍 [GetMyPets] User {userId} has {allPetsForUser.Count} total pets. Details:");
+            foreach (var p in allPetsForUser)
+            {
+                _logger.LogInformation($"   - Pet {p.Id} ({p.Name}): IsDeleted={p.IsDeleted}, Status={p.Status}");
+            }
+
             var pets = await _context.Pets
                 .Include(p => p.PetOwner)
-                .Where(p => p.PetOwnerId == userId && p.Status == PetStatus.Active)
+                .Where(p => p.PetOwnerId == userId && !p.IsDeleted && p.Status == PetStatus.Active)
                 .OrderBy(p => p.Name)
                 .ToListAsync();
+
+            _logger.LogInformation($"✅ [GetMyPets] Returning {pets.Count} pets for user {userId} (filtered: !IsDeleted && Active)");
 
             return Ok(pets);
         }
@@ -413,9 +426,21 @@ namespace veterinarskaStanica.WebAPI.Controllers
             pet.Status = PetStatus.Inactive;
             pet.DateModified = DateTime.UtcNow;
 
-            await _context.SaveChangesAsync();
+            // Eksplicitno označi entitet kao modified
+            _context.Entry(pet).Property(p => p.IsDeleted).IsModified = true;
+            _context.Entry(pet).Property(p => p.Status).IsModified = true;
+            _context.Entry(pet).Property(p => p.DateModified).IsModified = true;
 
-            _logger.LogInformation($"🗑️ Pet {id} soft deleted (IsDeleted=true) by user {userId}");
+            var rowsAffected = await _context.SaveChangesAsync();
+            _logger.LogInformation($"🗑️ Pet {id} soft deleted (IsDeleted=true) by user {userId}. Rows affected: {rowsAffected}");
+
+            // Proveri da li je zaista obrisan
+            var verifyPet = await _context.Pets.FindAsync(id);
+            if (verifyPet != null)
+            {
+                _logger.LogWarning($"⚠️ Pet {id} still exists after delete. IsDeleted={verifyPet.IsDeleted}, Status={verifyPet.Status}");
+            }
+
             return NoContent();
         }
 
@@ -447,9 +472,21 @@ namespace veterinarskaStanica.WebAPI.Controllers
             pet.Status = PetStatus.Inactive;
             pet.DateModified = DateTime.UtcNow;
 
-            await _context.SaveChangesAsync();
+            // Eksplicitno označi entitet kao modified
+            _context.Entry(pet).Property(p => p.IsDeleted).IsModified = true;
+            _context.Entry(pet).Property(p => p.Status).IsModified = true;
+            _context.Entry(pet).Property(p => p.DateModified).IsModified = true;
 
-            _logger.LogInformation($"🗑️ Pet {id} soft deleted (IsDeleted=true) by owner {userId}");
+            var rowsAffected = await _context.SaveChangesAsync();
+            _logger.LogInformation($"🗑️ Pet {id} soft deleted (IsDeleted=true) by owner {userId}. Rows affected: {rowsAffected}");
+
+            // Proveri da li je zaista obrisan
+            var verifyPet = await _context.Pets.FindAsync(id);
+            if (verifyPet != null)
+            {
+                _logger.LogWarning($"⚠️ Pet {id} still exists after delete. IsDeleted={verifyPet.IsDeleted}, Status={verifyPet.Status}");
+            }
+
             return NoContent();
         }
 

@@ -10,6 +10,7 @@ class ReviewsScreen extends StatefulWidget {
 
 class _ReviewsScreenState extends State<ReviewsScreen> {
   late Future<List<Map<String, dynamic>>> _future;
+  Set<int> _deletingIds = {}; // Track which reviews are being deleted
 
   @override
   void initState() {
@@ -18,8 +19,18 @@ class _ReviewsScreenState extends State<ReviewsScreen> {
   }
 
   Future<List<Map<String, dynamic>>> _load() async {
-    final api = serviceLocator.apiClient;
-    return await api.getAllReviews();
+    try {
+      print('🔍 [REVIEWS SCREEN] Loading reviews...');
+      final api = serviceLocator.apiClient;
+      final reviews = await api.getAllReviews();
+      print('✅ [REVIEWS SCREEN] Loaded ${reviews.length} reviews');
+      print('📋 [REVIEWS SCREEN] Reviews data: $reviews');
+      return reviews;
+    } catch (e, stackTrace) {
+      print('❌ [REVIEWS SCREEN] Error loading reviews: $e');
+      print('❌ [REVIEWS SCREEN] Stack trace: $stackTrace');
+      rethrow;
+    }
   }
 
   Future<void> _refresh() async {
@@ -29,32 +40,68 @@ class _ReviewsScreenState extends State<ReviewsScreen> {
   }
 
   Future<void> _deleteReview(int id) async {
+    // Show confirmation dialog
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Brisanje recenzije'),
-        content: const Text('Da li želite obrisati ovu recenziju?'),
+        content: const Text('Da li ste sigurni da želite obrisati ovu recenziju? Ova akcija se ne može poništiti.'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Otkaži')),
-          TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Obriši', style: TextStyle(color: Colors.red))),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Otkaži'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text(
+              'Obriši',
+              style: TextStyle(color: Colors.red),
+            ),
+          ),
         ],
       ),
     );
+    
     if (confirmed != true) return;
 
+    // Set loading state
+    setState(() {
+      _deletingIds.add(id);
+    });
+
     try {
+      print('🗑️ [REVIEWS SCREEN] Deleting review with ID: $id');
       await serviceLocator.apiClient.deleteReview(id);
+      print('✅ [REVIEWS SCREEN] Review deleted successfully');
+      
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Recenzija obrisana'), backgroundColor: Colors.green),
+          const SnackBar(
+            content: Text('Recenzija je uspešno obrisana'),
+            backgroundColor: Colors.green,
+            duration: Duration(seconds: 2),
+          ),
         );
+        // Refresh the list
         _refresh();
       }
     } catch (e) {
+      print('❌ [REVIEWS SCREEN] Error deleting review: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Greška pri brisanju: $e'), backgroundColor: Colors.red),
+          SnackBar(
+            content: Text('Greška pri brisanju recenzije: $e'),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 4),
+          ),
         );
+      }
+    } finally {
+      // Remove loading state
+      if (mounted) {
+        setState(() {
+          _deletingIds.remove(id);
+        });
       }
     }
   }
@@ -111,10 +158,20 @@ class _ReviewsScreenState extends State<ReviewsScreen> {
                       Text('Datum: ${(r['dateCreated'] ?? r['DateCreated'] ?? '').toString()}'),
                     ],
                   ),
-                  trailing: IconButton(
-                    icon: const Icon(Icons.delete, color: Colors.red),
-                    onPressed: () => _deleteReview((r['id'] ?? r['Id']) as int),
-                  ),
+                  trailing: _deletingIds.contains((r['id'] ?? r['Id']) as int)
+                      ? const Padding(
+                          padding: EdgeInsets.all(16.0),
+                          child: SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          ),
+                        )
+                      : IconButton(
+                          icon: const Icon(Icons.delete, color: Colors.red),
+                          tooltip: 'Obriši recenziju',
+                          onPressed: () => _deleteReview((r['id'] ?? r['Id']) as int),
+                        ),
                 ),
               );
             },

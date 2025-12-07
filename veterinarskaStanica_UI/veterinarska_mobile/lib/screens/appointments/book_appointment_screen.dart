@@ -228,9 +228,6 @@ class _BookAppointmentScreenState extends State<BookAppointmentScreen> {
       final createdAppointment = await apiClient.bookAppointment(appointmentData);
       
       if (mounted) {
-        // Pozovi callback za refresh liste
-        widget.onAppointmentBooked?.call();
-        
         // Ask user if they want to pay now
         final servicePrice = _selectedService!['price'];
         final priceText = servicePrice != null 
@@ -289,7 +286,14 @@ class _BookAppointmentScreenState extends State<BookAppointmentScreen> {
           );
         }
         
-        Navigator.of(context).pop();
+        // Pozovi callback za refresh liste NAKON dijaloga i pre zatvaranja ekrana
+        // Ovo će osigurati da se lista refreshuje kada se vrati na prethodnu stranicu
+        print('🔄 [BOOK APPOINTMENT] Calling onAppointmentBooked callback');
+        widget.onAppointmentBooked?.call();
+        print('🔄 [BOOK APPOINTMENT] Callback called, popping screen');
+        
+        // Vrati rezultat da se zna da je termin kreiran
+        Navigator.of(context).pop(true);
       }
     } catch (e) {
       if (mounted) {

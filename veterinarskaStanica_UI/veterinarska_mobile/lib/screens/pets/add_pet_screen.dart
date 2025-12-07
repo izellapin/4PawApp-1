@@ -14,7 +14,6 @@ class AddPetScreen extends StatefulWidget {
 class _AddPetScreenState extends State<AddPetScreen> {
   final _formKey = GlobalKey<FormState>();
   final _nameController = TextEditingController();
-  final _speciesController = TextEditingController();
   final _breedController = TextEditingController();
   final _colorController = TextEditingController();
   final _weightController = TextEditingController();
@@ -23,7 +22,17 @@ class _AddPetScreenState extends State<AddPetScreen> {
   final _ageController = TextEditingController();
   
   PetGender _selectedGender = PetGender.male;
+  String? _selectedSpecies;
   bool _isLoading = false;
+  
+  // Lista vrsta životinja
+  final List<String> _speciesList = [
+    'Pas',
+    'Mačka',
+    'Ptica',
+    'Zec',
+    'Glodar'
+  ];
 
   @override
   void initState() {
@@ -31,7 +40,13 @@ class _AddPetScreenState extends State<AddPetScreen> {
     if (widget.petToEdit != null) {
       // Popuni polja za edit mode
       _nameController.text = widget.petToEdit!.name;
-      _speciesController.text = widget.petToEdit!.species;
+      _selectedSpecies = widget.petToEdit!.species;
+      // Ako trenutna vrsta nije u listi, dodaj je
+      if (_selectedSpecies != null && 
+          _selectedSpecies!.isNotEmpty && 
+          !_speciesList.contains(_selectedSpecies)) {
+        _speciesList.insert(0, _selectedSpecies!);
+      }
       _breedController.text = widget.petToEdit!.breed ?? '';
       _colorController.text = widget.petToEdit!.color ?? '';
       _weightController.text = widget.petToEdit!.weight?.toString() ?? '';
@@ -55,7 +70,6 @@ class _AddPetScreenState extends State<AddPetScreen> {
   @override
   void dispose() {
     _nameController.dispose();
-    _speciesController.dispose();
     _breedController.dispose();
     _colorController.dispose();
     _weightController.dispose();
@@ -96,7 +110,7 @@ class _AddPetScreenState extends State<AddPetScreen> {
       
       final petData = {
         'name': _nameController.text,
-        'species': _speciesController.text,
+        'species': _selectedSpecies ?? '',
         'breed': _breedController.text.isEmpty ? null : _breedController.text,
         'gender': _selectedGender.index + 1, // Convert to backend enum (1=male, 2=female)
         'color': _colorController.text.isEmpty ? null : _colorController.text,
@@ -191,19 +205,29 @@ class _AddPetScreenState extends State<AddPetScreen> {
               const SizedBox(height: 16),
               
               // Vrsta
-              TextFormField(
-                controller: _speciesController,
+              DropdownButtonFormField<String>(
+                value: _selectedSpecies,
                 decoration: InputDecoration(
                   labelText: 'Vrsta *',
                   prefixIcon: const Icon(Icons.category),
-                  hintText: 'pas, mačka, ptica...',
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(12),
                   ),
                 ),
+                items: _speciesList.map((species) {
+                  return DropdownMenuItem<String>(
+                    value: species,
+                    child: Text(species),
+                  );
+                }).toList(),
+                onChanged: (value) {
+                  setState(() {
+                    _selectedSpecies = value;
+                  });
+                },
                 validator: (value) {
                   if (value == null || value.isEmpty) {
-                    return 'Unesite vrstu životinje';
+                    return 'Molimo izaberite vrstu';
                   }
                   return null;
                 },

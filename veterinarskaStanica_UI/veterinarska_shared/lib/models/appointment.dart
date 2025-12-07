@@ -269,8 +269,8 @@ class Appointment {
         id: json['id'] as int,
         appointmentNumber: json['appointmentNumber'] as String? ?? json['number'] as String? ?? '',
         appointmentDate: DateTime.parse(json['appointmentDate'] as String? ?? json['date'] as String? ?? DateTime.now().toIso8601String()),
-        startTime: json['startTime'] as String? ?? json['start_time'] as String? ?? '09:00',
-        endTime: json['endTime'] as String? ?? json['end_time'] as String? ?? '10:00',
+        startTime: _formatTime(json['startTime'] as String? ?? json['start_time'] as String? ?? '09:00'),
+        endTime: _formatTime(json['endTime'] as String? ?? json['end_time'] as String? ?? '10:00'),
         type: type,
         status: status,
         reason: json['reason'] as String?,
@@ -313,4 +313,21 @@ class Appointment {
   }
 
   Map<String, dynamic> toJson() => _$AppointmentToJson(this);
+  
+  // Helper funkcija za formatiranje vremena - uklanja sekunde ako postoje
+  static String _formatTime(String? time) {
+    if (time == null || time.isEmpty) {
+      return '09:00';
+    }
+    // Ako vreme ima format "HH:mm:ss" ili "HH:mm:ss.fff", uzmi samo "HH:mm"
+    if (time.length >= 5) {
+      final parts = time.split(':');
+      if (parts.length >= 2) {
+        final hour = parts[0].padLeft(2, '0');
+        final minute = parts[1].padLeft(2, '0');
+        return '$hour:$minute';
+      }
+    }
+    return time;
+  }
 }

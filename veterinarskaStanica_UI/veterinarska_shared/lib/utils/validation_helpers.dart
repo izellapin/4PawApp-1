@@ -44,6 +44,26 @@ class ValidationHelpers {
     return null;
   }
 
+  /// Validates phone number format: 061 111 222 (three groups of digits separated by spaces)
+  /// Returns null if valid, error message if invalid
+  static String? validatePhoneFormat(String? value, {bool required = false}) {
+    if (value == null || value.isEmpty) {
+      return required ? 'Unesite broj telefona' : null;
+    }
+
+    // Format: 061 111 222 (three groups of digits separated by spaces)
+    // First group: 2-3 digits (e.g., 061, 033)
+    // Second group: 3 digits (e.g., 111)
+    // Third group: 3 digits (e.g., 222)
+    final phoneFormatRegex = RegExp(r'^\d{2,3}\s\d{3}\s\d{3}$');
+
+    if (!phoneFormatRegex.hasMatch(value.trim())) {
+      return 'Unesite broj telefona u formatu: 061 111 222';
+    }
+
+    return null;
+  }
+
   /// Validates password
   /// Returns null if valid, error message if invalid
   static String? validatePassword(String? value, {bool required = true}) {

@@ -65,6 +65,10 @@ namespace veterinarskaStanica.WebAPI.Controllers
                     .Take(50) // Ograniči na 50 rezultata
                     .ToListAsync();
 
+                // Uklonjena automatska logika koja menja status na osnovu datuma
+                // Admin i veterinari imaju potpunu kontrolu nad statusom termina
+                // Status se menja samo kroz eksplicitne akcije (complete, cancel, itd.)
+
                 // Mapiraj na DTO nakon učitavanja
                 var appointmentDtos = appointments.Select((a, index) => {
                     string? serviceName = null;
@@ -219,6 +223,9 @@ namespace veterinarskaStanica.WebAPI.Controllers
                 .OrderByDescending(a => a.AppointmentDate)
                 .ToListAsync();
 
+            // Uklonjena automatska logika koja menja status na osnovu datuma
+            // Veterinari imaju potpunu kontrolu nad statusom termina
+
             // Mapiraj na DTO nakon učitavanja
             var appointmentDtos = appointments.Select(a => new AppointmentDto
             {
@@ -265,39 +272,45 @@ namespace veterinarskaStanica.WebAPI.Controllers
         [HttpGet("user/{userId}")]
         public async Task<ActionResult<IEnumerable<object>>> GetAppointmentsByUser(int userId)
         {
-            var appointments = await _context.Appointments
+            var appointmentsQuery = _context.Appointments
                 .Include(a => a.Pet)
                 .Include(a => a.Pet.PetOwner)
                 .Include(a => a.Veterinarian)
                 .Include(a => a.Service)
-                .Where(a => a.Pet.PetOwnerId == userId)
-                .Select(a => new
-                {
-                    a.Id,
-                    a.AppointmentNumber,
-                    a.AppointmentDate,
-                    StartTime = a.StartTime.ToString(@"hh\:mm"),
-                    EndTime = a.EndTime.ToString(@"hh\:mm"),
-                    Type = (int)a.Type,
-                    Status = (int)a.Status,
-                    PetName = a.Pet.Name,
-                    VeterinarianId = a.VeterinarianId,
-                    OwnerName = $"{a.Pet.PetOwner.FirstName} {a.Pet.PetOwner.LastName}",
-                    VeterinarianName = $"{a.Veterinarian.FirstName} {a.Veterinarian.LastName}",
-                    ServiceName = !string.IsNullOrEmpty(a.Reason) 
-                        ? a.Reason 
-                        : (a.Service != null && !string.IsNullOrEmpty(a.Service.Name) 
-                            ? a.Service.Name 
-                            : null),
-                    a.EstimatedCost,
-                    a.ActualCost,
-                    a.Reason,
-                    a.Notes
-                })
-                .OrderByDescending(a => a.AppointmentDate)
-                .ToListAsync();
+                .Where(a => a.Pet.PetOwnerId == userId);
 
-            return Ok(appointments);
+            var appointments = await appointmentsQuery.ToListAsync();
+
+            // Uklonjena automatska logika koja menja status na osnovu datuma
+            // Status se menja samo kroz eksplicitne akcije (complete, cancel, itd.)
+
+            var appointmentDtos = appointments.Select(a => new
+            {
+                a.Id,
+                a.AppointmentNumber,
+                a.AppointmentDate,
+                StartTime = a.StartTime.ToString(@"hh\:mm"),
+                EndTime = a.EndTime.ToString(@"hh\:mm"),
+                Type = (int)a.Type,
+                Status = (int)a.Status,
+                PetName = a.Pet.Name,
+                VeterinarianId = a.VeterinarianId,
+                OwnerName = $"{a.Pet.PetOwner.FirstName} {a.Pet.PetOwner.LastName}",
+                VeterinarianName = $"{a.Veterinarian.FirstName} {a.Veterinarian.LastName}",
+                ServiceName = !string.IsNullOrEmpty(a.Reason) 
+                    ? a.Reason 
+                    : (a.Service != null && !string.IsNullOrEmpty(a.Service.Name) 
+                        ? a.Service.Name 
+                        : null),
+                a.EstimatedCost,
+                a.ActualCost,
+                a.Reason,
+                a.Notes
+            })
+            .OrderByDescending(a => a.AppointmentDate)
+            .ToList();
+
+            return Ok(appointmentDtos);
         }
 
         // GET: api/Appointments/available-slots?veterinarianId=1&date=2025-10-20
@@ -499,8 +512,27 @@ namespace veterinarskaStanica.WebAPI.Controllers
         // PUT: api/Appointments/5
         [HttpPut("{id}")]
         [RoleRequired(UserRole.Admin, UserRole.Veterinarian)]
-        public async Task<ActionResult<Appointment>> UpdateAppointment(int id, AppointmentUpdateRequest request)
+        public async Task<ActionResult<AppointmentDto>> UpdateAppointment(int id, [FromBody] AppointmentUpdateRequest request)
         {
+            _logger.LogInformation("🔧 [UPDATE] UpdateAppointment called with ID: {Id}", id);
+            
+            // Log raw request body
+            Request.EnableBuffering();
+            Request.Body.Position = 0;
+            using var reader = new StreamReader(Request.Body, leaveOpen: true);
+            var rawBody = await reader.ReadToEndAsync();
+            Request.Body.Position = 0;
+            _logger.LogInformation("🔧 [UPDATE] Raw request body: {RawBody}", rawBody);
+            
+            _logger.LogInformation("🔧 [UPDATE] Request received: AppointmentDate={AppointmentDate}, StartTime={StartTime}, EndTime={EndTime}, Reason={Reason}, Notes={Notes}, EstimatedCost={EstimatedCost}, ActualCost={ActualCost}",
+                request?.AppointmentDate, request?.StartTime, request?.EndTime, request?.Reason, request?.Notes, request?.EstimatedCost, request?.ActualCost);
+            
+            if (request == null)
+            {
+                _logger.LogWarning("❌ [UPDATE] Request is null!");
+                return BadRequest("Request body is required.");
+            }
+
             if (!ModelState.IsValid)
             {
                 var errors = ModelState.Values
@@ -509,14 +541,22 @@ namespace veterinarskaStanica.WebAPI.Controllers
                     .Where(m => !string.IsNullOrWhiteSpace(m))
                     .ToList();
                 var message = errors.Count > 0 ? string.Join("; ", errors) : "Neispravni podaci.";
+                _logger.LogWarning("❌ [UPDATE] ModelState invalid: {Message}", message);
                 return BadRequest(message);
             }
 
             var appointment = await _context.Appointments.FindAsync(id);
             if (appointment == null)
             {
+                _logger.LogWarning("❌ [UPDATE] Appointment with ID {Id} not found", id);
                 return NotFound();
             }
+
+            _logger.LogInformation("🕐 [UPDATE] Backend time parsing:");
+            _logger.LogInformation("  StartTime string: '{StartTime}' (length: {StartTimeLength}, IsNullOrWhiteSpace: {IsNullOrWhiteSpace})", 
+                request.StartTime, request.StartTime?.Length ?? 0, string.IsNullOrWhiteSpace(request.StartTime));
+            _logger.LogInformation("  EndTime string: '{EndTime}' (length: {EndTimeLength}, IsNullOrWhiteSpace: {IsNullOrWhiteSpace})", 
+                request.EndTime, request.EndTime?.Length ?? 0, string.IsNullOrWhiteSpace(request.EndTime));
 
             // Ažuriraj polja
             appointment.AppointmentDate = request.AppointmentDate ?? appointment.AppointmentDate;
@@ -524,10 +564,20 @@ namespace veterinarskaStanica.WebAPI.Controllers
             {
                 try
                 {
-                    appointment.StartTime = TimeSpan.ParseExact(request.StartTime!, @"HH\:mm", CultureInfo.InvariantCulture);
+                    _logger.LogInformation("🕐 [UPDATE] Attempting to parse StartTime: '{StartTime}'", request.StartTime);
+                    // Use TimeSpan.Parse which is more flexible and handles "HH:mm" format correctly
+                    // Handle both "HH:mm" and "HH:mm:ss" formats by taking first 5 characters if longer
+                    var startTimeStr = request.StartTime!.Trim();
+                    if (startTimeStr.Length > 5)
+                    {
+                        startTimeStr = startTimeStr.Substring(0, 5);
+                    }
+                    appointment.StartTime = TimeSpan.Parse(startTimeStr);
+                    _logger.LogInformation("✅ [UPDATE] StartTime parsed successfully: {StartTime}", appointment.StartTime);
                 }
-                catch (FormatException)
+                catch (FormatException ex)
                 {
+                    _logger.LogError("❌ [UPDATE] FormatException parsing StartTime '{StartTime}': {Error}", request.StartTime, ex.Message);
                     return BadRequest("Neispravan format vremena za StartTime. Koristite HH:mm (npr. 10:05).");
                 }
             }
@@ -535,10 +585,20 @@ namespace veterinarskaStanica.WebAPI.Controllers
             {
                 try
                 {
-                    appointment.EndTime = TimeSpan.ParseExact(request.EndTime!, @"HH\:mm", CultureInfo.InvariantCulture);
+                    _logger.LogInformation("🕐 [UPDATE] Attempting to parse EndTime: '{EndTime}'", request.EndTime);
+                    // Use TimeSpan.Parse which is more flexible and handles "HH:mm" format correctly
+                    // Handle both "HH:mm" and "HH:mm:ss" formats by taking first 5 characters if longer
+                    var endTimeStr = request.EndTime!.Trim();
+                    if (endTimeStr.Length > 5)
+                    {
+                        endTimeStr = endTimeStr.Substring(0, 5);
+                    }
+                    appointment.EndTime = TimeSpan.Parse(endTimeStr);
+                    _logger.LogInformation("✅ [UPDATE] EndTime parsed successfully: {EndTime}", appointment.EndTime);
                 }
-                catch (FormatException)
+                catch (FormatException ex)
                 {
+                    _logger.LogError("❌ [UPDATE] FormatException parsing EndTime '{EndTime}': {Error}", request.EndTime, ex.Message);
                     return BadRequest("Neispravan format vremena za EndTime. Koristite HH:mm (npr. 11:30).");
                 }
             }
@@ -560,7 +620,64 @@ namespace veterinarskaStanica.WebAPI.Controllers
                 .Include(a => a.Service)
                 .FirstOrDefaultAsync(a => a.Id == appointment.Id);
 
-            return Ok(updatedAppointment);
+            if (updatedAppointment == null)
+            {
+                return NotFound();
+            }
+
+            // Mapiraj na DTO sa ispravnim formatom vremena
+            string? serviceName = null;
+            if (!string.IsNullOrEmpty(updatedAppointment.Reason))
+            {
+                serviceName = updatedAppointment.Reason;
+            }
+            else if (updatedAppointment.Service != null && !string.IsNullOrEmpty(updatedAppointment.Service.Name))
+            {
+                serviceName = updatedAppointment.Service.Name;
+            }
+            else
+            {
+                serviceName = updatedAppointment.Type switch
+                {
+                    AppointmentType.Checkup => "Godišnji pregled",
+                    AppointmentType.Vaccination => "Vakcinacija",
+                    AppointmentType.Surgery => "Sterilizacija",
+                    AppointmentType.Emergency => "Hitna pomoć",
+                    AppointmentType.Grooming => "Kompletno čišćenje",
+                    AppointmentType.Dental => "Čišćenje zuba",
+                    AppointmentType.Consultation => "Konsultacija",
+                    AppointmentType.FollowUp => "Kontrola",
+                    _ => null
+                };
+            }
+
+            var dto = new AppointmentDto
+            {
+                Id = updatedAppointment.Id,
+                AppointmentNumber = updatedAppointment.AppointmentNumber,
+                AppointmentDate = updatedAppointment.AppointmentDate,
+                StartTime = updatedAppointment.StartTime.ToString(@"hh\:mm"),
+                EndTime = updatedAppointment.EndTime.ToString(@"hh\:mm"),
+                Type = (int)updatedAppointment.Type,
+                Status = (int)updatedAppointment.Status,
+                PetId = updatedAppointment.PetId,
+                PetName = updatedAppointment.Pet.Name,
+                VeterinarianId = updatedAppointment.VeterinarianId,
+                OwnerName = $"{updatedAppointment.Pet.PetOwner.FirstName} {updatedAppointment.Pet.PetOwner.LastName}",
+                VeterinarianName = $"{updatedAppointment.Veterinarian.FirstName} {updatedAppointment.Veterinarian.LastName}",
+                ServiceId = updatedAppointment.ServiceId,
+                ServiceName = serviceName,
+                EstimatedCost = updatedAppointment.EstimatedCost,
+                ActualCost = updatedAppointment.ActualCost,
+                IsPaid = updatedAppointment.IsPaid,
+                PaymentDate = updatedAppointment.PaymentDate,
+                PaymentMethod = updatedAppointment.PaymentMethod,
+                PaymentTransactionId = updatedAppointment.PaymentTransactionId,
+                Reason = updatedAppointment.Reason,
+                Notes = updatedAppointment.Notes
+            };
+
+            return Ok(dto);
         }
 
         // PATCH: api/Appointments/5/complete
@@ -568,18 +685,53 @@ namespace veterinarskaStanica.WebAPI.Controllers
         [RoleRequired(UserRole.Admin, UserRole.Veterinarian)]
         public async Task<IActionResult> CompleteAppointment(int id, [FromBody] CompleteAppointmentRequest request)
         {
-            var appointment = await _context.Appointments.FindAsync(id);
+            _logger.LogInformation("✅ [COMPLETE APPOINTMENT] Starting complete appointment {AppointmentId}", id);
+            
+            // Koristi FirstOrDefaultAsync umesto FindAsync da bi izbegao cache probleme
+            var appointment = await _context.Appointments
+                .FirstOrDefaultAsync(a => a.Id == id);
             if (appointment == null)
             {
+                _logger.LogWarning("❌ [COMPLETE APPOINTMENT] Appointment {AppointmentId} not found", id);
                 return NotFound();
             }
 
+            _logger.LogInformation("🔍 [COMPLETE APPOINTMENT] Appointment {AppointmentId} found - Current Status: {Status}, Date: {Date}, EndTime: {EndTime}", 
+                id, appointment.Status, appointment.AppointmentDate, appointment.EndTime);
+
+            // Uklonjena validacija datuma - Admin i Veterinari imaju potpunu kontrolu nad statusom
+            // Mogu označiti termin kao završen bez obzira na datum (za slučajeve kada je termin prošao ali nije bio označen)
+            var appointmentDateTime = appointment.AppointmentDate.Date.Add(appointment.EndTime);
+            var now = DateTime.UtcNow;
+            _logger.LogInformation("🔍 [COMPLETE APPOINTMENT] Appointment DateTime: {AppointmentDateTime}, Now: {Now}, IsPast: {IsPast}", 
+                appointmentDateTime, now, appointmentDateTime <= now);
+            
+            // Loguj upozorenje ali ne blokiraj akciju
+            if (appointmentDateTime > now)
+            {
+                _logger.LogWarning("⚠️ [COMPLETE APPOINTMENT] Completing future appointment {AppointmentId} - allowed for admin/veterinarian", id);
+            }
+
+            var oldStatus = appointment.Status;
             appointment.Status = AppointmentStatus.Completed;
             appointment.ActualCost = request.ActualCost;
             appointment.Notes = string.IsNullOrEmpty(request.Notes) ? appointment.Notes : request.Notes;
             appointment.DateModified = DateTime.UtcNow;
 
-            await _context.SaveChangesAsync();
+            _logger.LogInformation("💾 [COMPLETE APPOINTMENT] Updating appointment {AppointmentId} - Old Status: {OldStatus}, New Status: {NewStatus}, ActualCost: {ActualCost}", 
+                id, oldStatus, appointment.Status, appointment.ActualCost);
+
+            var rowsAffected = await _context.SaveChangesAsync();
+            
+            _logger.LogInformation("✅ [COMPLETE APPOINTMENT] Appointment {AppointmentId} completed successfully. Rows affected: {RowsAffected}", id, rowsAffected);
+            
+            // Verifikuj da je status pravilno sačuvan - koristi AsNoTracking da bi dobio fresh podatke iz baze
+            await _context.Entry(appointment).ReloadAsync();
+            _logger.LogInformation("🔍 [COMPLETE APPOINTMENT] Verification - Appointment {AppointmentId} Status after reload: {Status}", id, appointment.Status);
+            if (appointment.Status != AppointmentStatus.Completed)
+            {
+                _logger.LogError("❌ [COMPLETE APPOINTMENT] CRITICAL: Status not saved correctly! Expected: Completed, Got: {Status}", appointment.Status);
+            }
 
             return NoContent();
         }
@@ -715,7 +867,7 @@ namespace veterinarskaStanica.WebAPI.Controllers
                     _logger.LogWarning("💳 [MARK PAID] ⚠️ Service ID {ServiceId} specified but Service entity not found", appointment.ServiceId.Value);
                 }
 
-                // Označi kao plaćeno i završi termin
+                // Označi kao plaćeno
                 var previousStatus = appointment.Status;
                 var previousIsPaid = appointment.IsPaid;
                 var previousPaymentMethod = appointment.PaymentMethod;
@@ -725,8 +877,12 @@ namespace veterinarskaStanica.WebAPI.Controllers
                 appointment.PaymentDate = DateTime.UtcNow;
                 appointment.PaymentMethod = string.IsNullOrWhiteSpace(request.PaymentMethod) ? "Stripe" : request.PaymentMethod;
                 appointment.PaymentTransactionId = request.PaymentTransactionId;
-                // Kada je plaćeno, smatramo termin završenim radi izvještaja
-                appointment.Status = AppointmentStatus.Completed;
+                
+                // NE menjaj status na Completed kada je plaćen
+                // Status se postavlja na Completed samo kada:
+                // 1. Veterinar klikne "Završi termin" (CompleteAppointment endpoint)
+                // 2. Automatski kada prođe datum rezervacije (ako se implementira)
+                _logger.LogInformation("💳 [MARK PAID] ✅ Payment recorded, status remains: {Status}", appointment.Status);
 
                 _logger.LogInformation("💳 [MARK PAID] 📝 Updating appointment payment fields:");
                 _logger.LogInformation("   - IsPaid: {PreviousIsPaid} -> {NewIsPaid}", previousIsPaid, appointment.IsPaid);
@@ -850,16 +1006,29 @@ namespace veterinarskaStanica.WebAPI.Controllers
         [RoleRequired(UserRole.Admin)]
         public async Task<IActionResult> DeleteAppointment(int id)
         {
-            var appointment = await _context.Appointments.FindAsync(id);
+            var appointment = await _context.Appointments
+                .Include(a => a.MedicalRecords)
+                .FirstOrDefaultAsync(a => a.Id == id);
+            
             if (appointment == null)
             {
                 return NotFound();
             }
 
-            appointment.Status = AppointmentStatus.Cancelled;
-            appointment.DateModified = DateTime.UtcNow;
+            // Prvo obrišite povezane MedicalRecords (ako postoje)
+            if (appointment.MedicalRecords != null && appointment.MedicalRecords.Any())
+            {
+                _context.MedicalRecords.RemoveRange(appointment.MedicalRecords);
+                _logger.LogInformation("🗑️ [DELETE] Removing {Count} MedicalRecords for Appointment {Id}", 
+                    appointment.MedicalRecords.Count, id);
+            }
 
+            // Zatim obrišite termin iz baze (hard delete)
+            _context.Appointments.Remove(appointment);
             await _context.SaveChangesAsync();
+
+            _logger.LogInformation("🗑️ [DELETE] Appointment {Id} (Date: {Date}) deleted from database", 
+                id, appointment.AppointmentDate.ToString("dd.MM.yyyy"));
 
             return NoContent();
         }
@@ -909,22 +1078,35 @@ namespace veterinarskaStanica.WebAPI.Controllers
 
     public class AppointmentUpdateRequest
     {
+        [System.Text.Json.Serialization.JsonPropertyName("appointmentDate")]
         public DateTime? AppointmentDate { get; set; }
+        
+        [System.Text.Json.Serialization.JsonPropertyName("startTime")]
         public string? StartTime { get; set; } // HH:mm
+        
+        [System.Text.Json.Serialization.JsonPropertyName("endTime")]
         public string? EndTime { get; set; } // HH:mm
+        
+        [System.Text.Json.Serialization.JsonPropertyName("type")]
         public AppointmentType? Type { get; set; }
+        
+        [System.Text.Json.Serialization.JsonPropertyName("status")]
         public AppointmentStatus? Status { get; set; }
 
         [StringLength(1000)]
+        [System.Text.Json.Serialization.JsonPropertyName("reason")]
         public string? Reason { get; set; }
 
         [StringLength(1000)]
+        [System.Text.Json.Serialization.JsonPropertyName("notes")]
         public string? Notes { get; set; }
 
         [Range(0, 10000)]
+        [System.Text.Json.Serialization.JsonPropertyName("estimatedCost")]
         public decimal? EstimatedCost { get; set; }
 
         [Range(0, 10000)]
+        [System.Text.Json.Serialization.JsonPropertyName("actualCost")]
         public decimal? ActualCost { get; set; }
     }
 

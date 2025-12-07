@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:veterinarska_shared/veterinarska_shared.dart';
 import 'package:veterinarska_shared/utils/validation_helpers.dart';
 
@@ -169,10 +170,14 @@ class _VeterinariansScreenState extends State<VeterinariansScreen> {
                             decoration: const InputDecoration(
                               labelText: 'Broj telefona',
                               border: OutlineInputBorder(),
-                              helperText: 'Format: +387 33 123 456 ili 061 123 456',
+                              helperText: 'Format: 061 111 222',
                             ),
                             keyboardType: TextInputType.phone,
-                            validator: (value) => ValidationHelpers.validatePhone(value, required: false),
+                            inputFormatters: [
+                              // Format input as user types: 061 111 222
+                              FilteringTextInputFormatter.allow(RegExp(r'[\d\s]')),
+                            ],
+                            validator: (value) => ValidationHelpers.validatePhoneFormat(value, required: false),
                           ),
                         ),
                         const SizedBox(width: 16),
@@ -437,10 +442,14 @@ class _VeterinariansScreenState extends State<VeterinariansScreen> {
                             decoration: const InputDecoration(
                               labelText: 'Broj telefona',
                               border: OutlineInputBorder(),
-                              helperText: 'Format: +387 33 123 456 ili 061 123 456',
+                              helperText: 'Format: 061 111 222',
                             ),
                             keyboardType: TextInputType.phone,
-                            validator: (value) => ValidationHelpers.validatePhone(value, required: false),
+                            inputFormatters: [
+                              // Format input as user types: 061 111 222
+                              FilteringTextInputFormatter.allow(RegExp(r'[\d\s]')),
+                            ],
+                            validator: (value) => ValidationHelpers.validatePhoneFormat(value, required: false),
                           ),
                         ),
                         const SizedBox(width: 16),

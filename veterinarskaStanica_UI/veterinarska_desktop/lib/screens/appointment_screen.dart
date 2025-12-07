@@ -39,6 +39,8 @@ class _AppointmentScreenState extends State<AppointmentScreen> {
   }
 
   Future<void> _loadAppointments() async {
+    if (!mounted) return;
+    
     setState(() {
       _isLoading = true;
       _error = null;
@@ -56,6 +58,8 @@ class _AppointmentScreenState extends State<AppointmentScreen> {
         appointments = await apiClient.getMyAppointments();
       }
 
+      if (!mounted) return;
+
       debugPrint('✅ Appointments loaded: ${appointments.length} appointments');
       
       // Debug: prikaži serviceName za sve termine
@@ -67,19 +71,69 @@ class _AppointmentScreenState extends State<AppointmentScreen> {
         }
       }
       
+      if (!mounted) return;
+      
+      // Sačuvaj ID-jeve appointmenta koji su lokalno postavljeni na completed
+      final Set<int> localCompletedAppointmentIds = _appointments
+          .where((apt) => apt.status == AppointmentStatus.completed)
+          .map((apt) => apt.id)
+          .toSet();
+      
       setState(() {
-        _appointments = appointments;
+        // Zameni listu, ali zadrži completed statuse za appointmente koji su lokalno postavljeni na completed
+        _appointments = appointments.map((apt) {
+          // Ako je appointment lokalno postavljen na completed, zadrži taj status
+          if (localCompletedAppointmentIds.contains(apt.id) && apt.status != AppointmentStatus.completed) {
+            print('🔄 Keeping local completed status for appointment ${apt.id} (server returned ${apt.status})');
+            return Appointment(
+              id: apt.id,
+              appointmentNumber: apt.appointmentNumber,
+              appointmentDate: apt.appointmentDate,
+              startTime: apt.startTime,
+              endTime: apt.endTime,
+              type: apt.type,
+              status: AppointmentStatus.completed, // Zadrži completed status
+              petId: apt.petId,
+              veterinarianId: apt.veterinarianId,
+              serviceId: apt.serviceId,
+              reason: apt.reason,
+              notes: apt.notes,
+              estimatedCost: apt.estimatedCost,
+              actualCost: apt.actualCost,
+              isPaid: apt.isPaid,
+              paymentDate: apt.paymentDate,
+              paymentMethod: apt.paymentMethod,
+              paymentTransactionId: apt.paymentTransactionId,
+              createdAt: apt.createdAt,
+              updatedAt: apt.updatedAt,
+              petName: apt.petName,
+              veterinarianName: apt.veterinarianName,
+              serviceName: apt.serviceName,
+              ownerName: apt.ownerName,
+            );
+          }
+          return apt;
+        }).toList();
         _isLoading = false;
       });
 
+      if (!mounted) return;
+
       if (_filterServiceName != null) {
-        _filterAppointmentsByServiceName(_filterServiceName);
+        if (mounted) {
+          _filterAppointmentsByServiceName(_filterServiceName);
+        }
       } else {
-        setState(() {
-          _filteredAppointments = appointments;
-        });
+        if (mounted) {
+          setState(() {
+            // Primeni istu logiku za filtriranu listu
+            _filteredAppointments = _appointments;
+          });
+        }
       }
     } catch (e) {
+      if (!mounted) return;
+      
       debugPrint('❌ Error loading appointments: $e');
       debugPrint('❌ Error type: ${e.runtimeType}');
       if (e is ApiError) {
@@ -94,6 +148,8 @@ class _AppointmentScreenState extends State<AppointmentScreen> {
         await serviceLocator.reset();
         debugPrint('✅ ServiceLocator reset complete, retrying...');
         
+        if (!mounted) return;
+        
         final apiClient = serviceLocator.apiClient;
         List<Appointment> appointments;
 
@@ -103,26 +159,74 @@ class _AppointmentScreenState extends State<AppointmentScreen> {
           appointments = await apiClient.getMyAppointments();
         }
 
+        if (!mounted) return;
+
+        // Sačuvaj ID-jeve appointmenta koji su lokalno postavljeni na completed (i u retry logici)
+        final Set<int> localCompletedAppointmentIdsRetry = _appointments
+            .where((apt) => apt.status == AppointmentStatus.completed)
+            .map((apt) => apt.id)
+            .toSet();
+
         setState(() {
-          _appointments = appointments;
+          // Zameni listu, ali zadrži completed statuse za appointmente koji su lokalno postavljeni na completed
+          _appointments = appointments.map((apt) {
+            // Ako je appointment lokalno postavljen na completed, zadrži taj status
+            if (localCompletedAppointmentIdsRetry.contains(apt.id) && apt.status != AppointmentStatus.completed) {
+              print('🔄 [RETRY] Keeping local completed status for appointment ${apt.id} (server returned ${apt.status})');
+              return Appointment(
+                id: apt.id,
+                appointmentNumber: apt.appointmentNumber,
+                appointmentDate: apt.appointmentDate,
+                startTime: apt.startTime,
+                endTime: apt.endTime,
+                type: apt.type,
+                status: AppointmentStatus.completed, // Zadrži completed status
+                petId: apt.petId,
+                veterinarianId: apt.veterinarianId,
+                serviceId: apt.serviceId,
+                reason: apt.reason,
+                notes: apt.notes,
+                estimatedCost: apt.estimatedCost,
+                actualCost: apt.actualCost,
+                isPaid: apt.isPaid,
+                paymentDate: apt.paymentDate,
+                paymentMethod: apt.paymentMethod,
+                paymentTransactionId: apt.paymentTransactionId,
+                createdAt: apt.createdAt,
+                updatedAt: apt.updatedAt,
+                petName: apt.petName,
+                veterinarianName: apt.veterinarianName,
+                serviceName: apt.serviceName,
+                ownerName: apt.ownerName,
+              );
+            }
+            return apt;
+          }).toList();
           _isLoading = false;
         });
+
+        if (!mounted) return;
 
         if (_filterServiceName != null) {
           _filterAppointmentsByServiceName(_filterServiceName);
         } else {
-          setState(() {
-            _filteredAppointments = appointments;
-          });
+          if (mounted) {
+            setState(() {
+              // Primeni istu logiku za filtriranu listu
+              _filteredAppointments = _appointments;
+            });
+          }
         }
         debugPrint('✅ Appointments loaded successfully after reset');
         return; // Success after retry
       } catch (retryError) {
         debugPrint('❌ Retry after reset failed: $retryError');
-        setState(() {
-          _error = 'Greška konekcije sa serverom. Provjerite da li je backend pokrenut.';
-          _isLoading = false;
-        });
+        if (mounted) {
+          setState(() {
+            _error = 'Greška konekcije sa serverom. Provjerite da li je backend pokrenut.';
+            _isLoading = false;
+          });
+        }
       }
     }
   }
@@ -231,6 +335,8 @@ class _AppointmentScreenState extends State<AppointmentScreen> {
   }
 
   void _filterAppointmentsByServiceName(String? serviceName) {
+    if (!mounted) return;
+    
     setState(() {
       _filterServiceName = serviceName;
       if (serviceName == null || serviceName.isEmpty) {
@@ -271,15 +377,31 @@ class _AppointmentScreenState extends State<AppointmentScreen> {
     _showAppointmentDetails(appointment);
   }
 
+  // Sačuvaj setDialogState za osvežavanje dijaloga
+  StateSetter? _dialogStateSetter;
+  
   void _showAppointmentDetails(Appointment appointment) {
+    // Ažuriraj _selectedAppointment pre prikazivanja dijaloga
+    _selectedAppointment = appointment;
+    
     showDialog(
       context: context,
       builder: (BuildContext context) {
-        return Dialog(
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(20),
-          ),
-          child: Container(
+        // Koristi StatefulBuilder da se dialog osvežava kada se _selectedAppointment promeni
+        return StatefulBuilder(
+          key: ValueKey('appointment_dialog_${_selectedAppointment?.id}_${_selectedAppointment?.status}'),
+          builder: (BuildContext context, StateSetter setDialogState) {
+            // Sačuvaj setDialogState za kasnije osvežavanje
+            _dialogStateSetter = setDialogState;
+            
+            // Koristi _selectedAppointment umesto prosleđenog appointment objekta
+            final currentAppointment = _selectedAppointment ?? appointment;
+            
+            return Dialog(
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Container(
             constraints: const BoxConstraints(maxWidth: 600, maxHeight: 700),
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(20),
@@ -340,7 +462,7 @@ class _AppointmentScreenState extends State<AppointmentScreen> {
                               ),
                             ),
                             Text(
-                              appointment.appointmentNumber,
+                              currentAppointment.appointmentNumber,
                               style: const TextStyle(
                                 color: Colors.white70,
                                 fontSize: 16,
@@ -358,12 +480,12 @@ class _AppointmentScreenState extends State<AppointmentScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        _buildDetailRow('Pacijent', appointment.petName ?? 'Nepoznato', Icons.pets),
-                        _buildDetailRow('Vlasnik', appointment.ownerName ?? 'Nepoznato', Icons.person),
-                        _buildDetailRow('Veterinar', appointment.veterinarianName ?? 'Nepoznato', Icons.medical_services),
-                        _buildDetailRow('Tip', appointment.typeText, Icons.category),
-                        _buildDetailRow('Status', appointment.statusText, Icons.info),
-                        if (appointment.isPaid) ...[
+                        _buildDetailRow('Pacijent', currentAppointment.petName ?? 'Nepoznato', Icons.pets),
+                        _buildDetailRow('Vlasnik', currentAppointment.ownerName ?? 'Nepoznato', Icons.person),
+                        _buildDetailRow('Veterinar', currentAppointment.veterinarianName ?? 'Nepoznato', Icons.medical_services),
+                        _buildDetailRow('Tip', currentAppointment.typeText, Icons.category),
+                        _buildDetailRow('Status', currentAppointment.statusText, Icons.info),
+                        if (currentAppointment.isPaid) ...[
                           const SizedBox(height: 16),
                           Container(
                             padding: const EdgeInsets.all(12),
@@ -384,10 +506,10 @@ class _AppointmentScreenState extends State<AppointmentScreen> {
                                     color: Colors.green.shade600,
                                   ),
                                 ),
-                                if (appointment.paymentMethod != null) ...[
+                                if (currentAppointment.paymentMethod != null) ...[
                                   const SizedBox(width: 8),
                                   Text(
-                                    '(${appointment.paymentMethod})',
+                                    '(${currentAppointment.paymentMethod})',
                                     style: TextStyle(
                                       fontSize: 14,
                                       color: Colors.green.shade700,
@@ -398,16 +520,16 @@ class _AppointmentScreenState extends State<AppointmentScreen> {
                             ),
                           ),
                         ],
-                        _buildDetailRow('Datum', '${appointment.appointmentDate.day}.${appointment.appointmentDate.month}.${appointment.appointmentDate.year}', Icons.calendar_today),
-                        _buildDetailRow('Vreme', appointment.timeRange, Icons.access_time),
-                        if (appointment.reason != null)
-                          _buildDetailRow('Razlog', appointment.reason!, Icons.description),
-                        if (appointment.notes != null)
-                          _buildDetailRow('Napomene', appointment.notes!, Icons.note),
-                        if (appointment.estimatedCost != null)
-                          _buildDetailRow('Procenjeni trošak', '€${appointment.estimatedCost}', Icons.euro),
-                        if (appointment.actualCost != null)
-                          _buildDetailRow('Stvarni trošak', '€${appointment.actualCost}', Icons.payment),
+                        _buildDetailRow('Datum', '${currentAppointment.appointmentDate.day}.${currentAppointment.appointmentDate.month}.${currentAppointment.appointmentDate.year}', Icons.calendar_today),
+                        _buildDetailRow('Vreme', currentAppointment.timeRange, Icons.access_time),
+                        if (currentAppointment.reason != null)
+                          _buildDetailRow('Razlog', currentAppointment.reason!, Icons.description),
+                        if (currentAppointment.notes != null)
+                          _buildDetailRow('Napomene', currentAppointment.notes!, Icons.note),
+                        if (currentAppointment.estimatedCost != null)
+                          _buildDetailRow('Procenjeni trošak', '€${currentAppointment.estimatedCost}', Icons.euro),
+                        if (currentAppointment.actualCost != null)
+                          _buildDetailRow('Stvarni trošak', '€${currentAppointment.actualCost}', Icons.payment),
                       ],
                     ),
                   ),
@@ -426,6 +548,7 @@ class _AppointmentScreenState extends State<AppointmentScreen> {
                     children: [
                       TextButton(
                         onPressed: () {
+                          _dialogStateSetter = null; // Očisti setDialogState kada se dialog zatvori
                           Navigator.of(context).pop();
                         },
                         style: TextButton.styleFrom(
@@ -443,26 +566,10 @@ class _AppointmentScreenState extends State<AppointmentScreen> {
                       ElevatedButton(
                         onPressed: () {
                           Navigator.of(context).pop();
-                          _showEditAppointmentDialog(appointment);
-                        },
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFF2E7D32),
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                        ),
-                        child: const Text(
-                          'Uredi',
-                          style: TextStyle(fontSize: 16),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      ElevatedButton(
-                        onPressed: () {
-                          Navigator.of(context).pop();
-                          _showFinishConfirmation(appointment);
+                          // Proveri da li je widget još uvek mounted pre poziva _showFinishConfirmation
+                          if (mounted) {
+                            _showFinishConfirmation(currentAppointment);
+                          }
                         },
                         style: ElevatedButton.styleFrom(
                           backgroundColor: Colors.red,
@@ -483,6 +590,8 @@ class _AppointmentScreenState extends State<AppointmentScreen> {
               ],
             ),
           ),
+            );
+          },
         );
       },
     );
@@ -548,16 +657,643 @@ class _AppointmentScreenState extends State<AppointmentScreen> {
     );
   }
 
+  // Helper funkcija za konverziju String vremena u TimeOfDay
+  TimeOfDay? _parseTimeFromString(String? timeString) {
+    if (timeString == null || timeString.isEmpty) return null;
+    try {
+      final parts = timeString.split(':');
+      if (parts.length == 2) {
+        final hour = int.parse(parts[0]);
+        final minute = int.parse(parts[1]);
+        return TimeOfDay(hour: hour, minute: minute);
+      }
+    } catch (e) {
+      debugPrint('Error parsing time: $e');
+    }
+    return null;
+  }
+
   void _showEditAppointmentDialog(Appointment appointment) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Uređivanje termina će biti implementirano uskoro'),
-        backgroundColor: Colors.orange,
-      ),
+    // Refresh pets so newly added patients appear in the dropdown
+    _loadPets();
+    
+    // Inicijalizuj kontrolere sa postojećim podacima
+    final appointmentDate = appointment.appointmentDate;
+    final startTime = _parseTimeFromString(appointment.startTime);
+    final endTime = _parseTimeFromString(appointment.endTime);
+    final reasonController = TextEditingController(text: appointment.reason ?? '');
+    final notesController = TextEditingController(text: appointment.notes ?? '');
+    final estimatedCostController = TextEditingController(
+      text: appointment.estimatedCost?.toString() ?? '',
+    );
+    final actualCostController = TextEditingController(
+      text: appointment.actualCost?.toString() ?? '',
+    );
+    
+    // Pronađi pacijenta
+    Pet? selectedPet;
+    if (appointment.petId != null) {
+      try {
+        selectedPet = _pets.firstWhere((p) => p.id == appointment.petId);
+      } catch (e) {
+        debugPrint('Pet not found: ${appointment.petId}');
+      }
+    }
+    
+    // Varijabla za zapamćenu vrstu ljubimca
+    String? selectedPetSpecies = selectedPet?.species;
+    
+    // Lista usluga filtrirana po vrsti
+    List<Map<String, dynamic>> filteredServices = [];
+    bool isLoadingServices = false;
+    int? selectedServiceId = appointment.serviceId;
+    
+    // Učitaj usluge za vrstu pacijenta
+    Future<void> loadServicesForSpecies(String? species, StateSetter setDialogState) async {
+      if (species == null || species.isEmpty) {
+        setDialogState(() {
+          filteredServices = [];
+          isLoadingServices = false;
+        });
+        return;
+      }
+      
+      setDialogState(() {
+        isLoadingServices = true;
+      });
+      
+      try {
+        final apiClient = serviceLocator.apiClient;
+        final services = await apiClient.getServices(species: species);
+        
+        setDialogState(() {
+          filteredServices = List<Map<String, dynamic>>.from(services);
+          isLoadingServices = false;
+        });
+      } catch (e) {
+        debugPrint('Error loading services: $e');
+        setDialogState(() {
+          filteredServices = [];
+          isLoadingServices = false;
+        });
+      }
+    }
+
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return StatefulBuilder(
+          builder: (context, setState) {
+            // Učitaj usluge pri otvaranju dijaloga ako postoji pacijent
+            if (selectedPetSpecies != null && filteredServices.isEmpty && !isLoadingServices) {
+              loadServicesForSpecies(selectedPetSpecies, setState);
+            }
+            
+            DateTime? selectedDate = appointmentDate;
+            TimeOfDay? selectedStartTime = startTime;
+            TimeOfDay? selectedEndTime = endTime;
+            
+            return Dialog(
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Container(
+                constraints: const BoxConstraints(maxWidth: 600, maxHeight: 700),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(20),
+                  gradient: const LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [
+                      Color(0xFFE8F5E8),
+                      Color(0xFFF0F8F0),
+                    ],
+                  ),
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // Header
+                    Container(
+                      padding: const EdgeInsets.all(24),
+                      decoration: const BoxDecoration(
+                        color: Color(0xFF2E7D32),
+                        borderRadius: BorderRadius.only(
+                          topLeft: Radius.circular(20),
+                          topRight: Radius.circular(20),
+                        ),
+                      ),
+                      child: Row(
+                        children: [
+                          Container(
+                            width: 50,
+                            height: 50,
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(25),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withOpacity(0.1),
+                                  blurRadius: 10,
+                                  offset: const Offset(0, 5),
+                                ),
+                              ],
+                            ),
+                            child: const Icon(
+                              Icons.edit,
+                              color: Color(0xFF2E7D32),
+                              size: 24,
+                            ),
+                          ),
+                          const SizedBox(width: 16),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text(
+                                  'Uredi Termin',
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 22,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                                Text(
+                                  appointment.appointmentNumber,
+                                  style: const TextStyle(
+                                    color: Colors.white70,
+                                    fontSize: 14,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    
+                    // Content
+                    Flexible(
+                      child: SingleChildScrollView(
+                        padding: const EdgeInsets.all(24),
+                        child: Column(
+                          children: [
+                            // Date picker
+                            _buildDatePicker(
+                              label: 'Datum termina',
+                              icon: Icons.calendar_today,
+                              selectedDate: selectedDate,
+                              onDateSelected: (date) {
+                                setState(() {
+                                  selectedDate = date;
+                                });
+                              },
+                            ),
+                            const SizedBox(height: 16),
+                            
+                            // Time pickers
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: _buildTimePicker(
+                                    label: 'Početak',
+                                    icon: Icons.access_time,
+                                    selectedTime: selectedStartTime,
+                                    onTimeSelected: (time) {
+                                      setState(() {
+                                        selectedStartTime = time;
+                                      });
+                                    },
+                                  ),
+                                ),
+                                const SizedBox(width: 16),
+                                Expanded(
+                                  child: _buildTimePicker(
+                                    label: 'Kraj',
+                                    icon: Icons.access_time,
+                                    selectedTime: selectedEndTime,
+                                    onTimeSelected: (time) {
+                                      setState(() {
+                                        selectedEndTime = time;
+                                      });
+                                    },
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 16),
+                            
+                            // Pet (read-only display)
+                            Container(
+                              padding: const EdgeInsets.all(16),
+                              decoration: BoxDecoration(
+                                color: Colors.white.withOpacity(0.8),
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(color: Colors.grey.withOpacity(0.3)),
+                              ),
+                              child: Row(
+                                children: [
+                                  Container(
+                                    padding: const EdgeInsets.all(8),
+                                    decoration: BoxDecoration(
+                                      color: const Color(0xFF2E7D32).withOpacity(0.1),
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                    child: const Icon(
+                                      Icons.pets,
+                                      color: Color(0xFF2E7D32),
+                                      size: 20,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 16),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        const Text(
+                                          'Pacijent',
+                                          style: TextStyle(
+                                            fontSize: 12,
+                                            color: Colors.grey,
+                                            fontWeight: FontWeight.w500,
+                                          ),
+                                        ),
+                                        const SizedBox(height: 4),
+                                        Text(
+                                          appointment.petName ?? 'Nepoznato',
+                                          style: const TextStyle(
+                                            fontSize: 16,
+                                            fontWeight: FontWeight.w600,
+                                            color: Color(0xFF2E7D32),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(height: 16),
+                            
+                            // Veterinarian (read-only display)
+                            Container(
+                              padding: const EdgeInsets.all(16),
+                              decoration: BoxDecoration(
+                                color: Colors.white.withOpacity(0.8),
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(color: Colors.grey.withOpacity(0.3)),
+                              ),
+                              child: Row(
+                                children: [
+                                  Container(
+                                    padding: const EdgeInsets.all(8),
+                                    decoration: BoxDecoration(
+                                      color: const Color(0xFF2E7D32).withOpacity(0.1),
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                    child: const Icon(
+                                      Icons.medical_services,
+                                      color: Color(0xFF2E7D32),
+                                      size: 20,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 16),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        const Text(
+                                          'Veterinar',
+                                          style: TextStyle(
+                                            fontSize: 12,
+                                            color: Colors.grey,
+                                            fontWeight: FontWeight.w500,
+                                          ),
+                                        ),
+                                        const SizedBox(height: 4),
+                                        Text(
+                                          appointment.veterinarianName ?? 'Nepoznato',
+                                          style: const TextStyle(
+                                            fontSize: 16,
+                                            fontWeight: FontWeight.w600,
+                                            color: Color(0xFF2E7D32),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(height: 16),
+                            
+                            // Service dropdown
+                            isLoadingServices
+                                ? const Center(
+                                    child: Padding(
+                                      padding: EdgeInsets.all(16.0),
+                                      child: CircularProgressIndicator(),
+                                    ),
+                                  )
+                                : DropdownButtonFormField<int?>(
+                                    value: selectedServiceId,
+                                    menuMaxHeight: 300,
+                                    items: [
+                                      const DropdownMenuItem<int?>(
+                                        value: null,
+                                        child: Text('Nijedna usluga'),
+                                      ),
+                                      ...filteredServices.map((s) {
+                                        final serviceName = s['name']?.toString() ?? 'Usluga';
+                                        final servicePrice = s['price']?.toString() ?? '0';
+                                        return DropdownMenuItem<int?>(
+                                          value: s['id'] as int?,
+                                          child: Text(
+                                            serviceName,
+                                            style: const TextStyle(
+                                              fontWeight: FontWeight.bold,
+                                              fontSize: 14,
+                                            ),
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                        );
+                                      }),
+                                    ],
+                                    onChanged: (value) {
+                                      setState(() {
+                                        selectedServiceId = value;
+                                      });
+                                    },
+                                    decoration: const InputDecoration(
+                                      labelText: 'Usluga',
+                                      prefixIcon: Icon(Icons.medical_information, color: Color(0xFF2E7D32)),
+                                    ),
+                                  ),
+                            const SizedBox(height: 16),
+                            
+                            // Estimated Cost and Actual Cost
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: _buildTextField(
+                                    controller: estimatedCostController,
+                                    label: 'Procijenjeni trošak',
+                                    icon: Icons.payments,
+                                    keyboardType: TextInputType.number,
+                                  ),
+                                ),
+                                const SizedBox(width: 16),
+                                Expanded(
+                                  child: _buildTextField(
+                                    controller: actualCostController,
+                                    label: 'Stvarni trošak',
+                                    icon: Icons.payment,
+                                    keyboardType: TextInputType.number,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 16),
+                            
+                            // Reason and Notes
+                            _buildTextField(
+                              controller: reasonController,
+                              label: 'Razlog',
+                              icon: Icons.description,
+                              maxLines: 2,
+                            ),
+                            const SizedBox(height: 16),
+                            
+                            _buildTextField(
+                              controller: notesController,
+                              label: 'Napomene',
+                              icon: Icons.note,
+                              maxLines: 3,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    
+                    // Actions
+                    Container(
+                      padding: const EdgeInsets.all(24),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.8),
+                        borderRadius: const BorderRadius.only(
+                          bottomLeft: Radius.circular(20),
+                          bottomRight: Radius.circular(20),
+                        ),
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.end,
+                        children: [
+                          TextButton(
+                            onPressed: () {
+                              Navigator.of(context).pop();
+                            },
+                            style: TextButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                            ),
+                            child: const Text(
+                              'Otkaži',
+                              style: TextStyle(
+                                color: Colors.grey,
+                                fontSize: 16,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          ElevatedButton(
+                            onPressed: () async {
+                              // Validacija
+                              if (selectedDate == null) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text('Molimo izaberite datum termina'),
+                                    backgroundColor: Colors.red,
+                                  ),
+                                );
+                                return;
+                              }
+                              
+                              if (selectedStartTime == null || selectedEndTime == null) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text('Molimo izaberite vreme početka i kraja'),
+                                    backgroundColor: Colors.red,
+                                  ),
+                                );
+                                return;
+                              }
+
+                              // Formatiraj vreme kao HH:mm string (24-satni format)
+                              // TimeOfDay.hour je uvek 0-23, tako da je ovo već 24-satni format
+                              String two(int n) {
+                                final str = n.toString();
+                                return str.length == 1 ? '0$str' : str;
+                              }
+                              final startTimeStr = '${two(selectedStartTime!.hour)}:${two(selectedStartTime!.minute)}';
+                              final endTimeStr = '${two(selectedEndTime!.hour)}:${two(selectedEndTime!.minute)}';
+                              
+                              // Validacija formata
+                              if (!RegExp(r'^\d{2}:\d{2}$').hasMatch(startTimeStr) || 
+                                  !RegExp(r'^\d{2}:\d{2}$').hasMatch(endTimeStr)) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text('Greška u formatu vremena. Molimo pokušajte ponovo.'),
+                                    backgroundColor: Colors.red,
+                                  ),
+                                );
+                                return;
+                              }
+                              
+                              debugPrint('🕐 [UPDATE] Time formatting:');
+                              debugPrint('  selectedStartTime: ${selectedStartTime!.hour}:${selectedStartTime!.minute}');
+                              debugPrint('  selectedEndTime: ${selectedEndTime!.hour}:${selectedEndTime!.minute}');
+                              debugPrint('  startTimeStr: "$startTimeStr"');
+                              debugPrint('  endTimeStr: "$endTimeStr"');
+                              
+                              // Pripremi podatke za update
+                              // Backend koristi JsonNamingPolicy.CamelCase, tako da koristimo camelCase
+                              final updateData = <String, dynamic>{
+                                'appointmentDate': selectedDate!.toIso8601String(),
+                                'startTime': startTimeStr,
+                                'endTime': endTimeStr,
+                                'reason': reasonController.text.isEmpty ? null : reasonController.text,
+                                'notes': notesController.text.isEmpty ? null : notesController.text,
+                                'estimatedCost': estimatedCostController.text.isEmpty ? null : double.tryParse(estimatedCostController.text),
+                                'actualCost': actualCostController.text.isEmpty ? null : double.tryParse(actualCostController.text),
+                              };
+                              
+                              debugPrint('📤 [UPDATE] Sending data: $updateData');
+                              debugPrint('📤 [UPDATE] startTime type: ${startTimeStr.runtimeType}, value: "$startTimeStr"');
+                              debugPrint('📤 [UPDATE] endTime type: ${endTimeStr.runtimeType}, value: "$endTimeStr"');
+                              
+                              // Dodaj serviceId ako je odabran
+                              if (selectedServiceId != null) {
+                                // Note: Backend možda ne podržava promenu serviceId-a, ali pokušajmo
+                                // updateData['serviceId'] = selectedServiceId;
+                              }
+
+                              Navigator.of(context).pop();
+                              await _updateAppointment(appointment.id, updateData);
+                            },
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: const Color(0xFF2E7D32),
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                            ),
+                            child: const Text(
+                              'Sačuvaj',
+                              style: TextStyle(fontSize: 16),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
     );
   }
 
+  Future<void> _updateAppointment(int appointmentId, Map<String, dynamic> data) async {
+    try {
+      print('✏️ Updating appointment $appointmentId with data: $data');
+      final apiClient = serviceLocator.apiClient;
+      final updatedAppointment = await apiClient.updateAppointment(appointmentId, data);
+      print('✅ Appointment updated successfully');
+      
+      if (mounted) {
+        // Ažuriraj appointment u listi direktno PRVO, pre nego što osvežimo celu listu
+        setState(() {
+          // Ažuriraj appointment u glavnoj listi
+          final index = _appointments.indexWhere((a) => a.id == appointmentId);
+          if (index != -1) {
+            print('🔄 Updating appointment at index $index in _appointments');
+            _appointments[index] = updatedAppointment;
+            print('✅ Updated appointment: ${updatedAppointment.startTime} - ${updatedAppointment.endTime}');
+          }
+          
+          // Ažuriraj appointment u filtriranoj listi
+          final filteredIndex = _filteredAppointments.indexWhere((a) => a.id == appointmentId);
+          if (filteredIndex != -1) {
+            print('🔄 Updating appointment at index $filteredIndex in _filteredAppointments');
+            _filteredAppointments[filteredIndex] = updatedAppointment;
+          }
+          
+          // Ažuriraj selektovani appointment
+          if (_selectedAppointment?.id == appointmentId) {
+            print('🔄 Updating _selectedAppointment');
+            _selectedAppointment = updatedAppointment;
+          }
+        });
+        
+        // Osveži celu listu sa servera
+        await _loadAppointments();
+        
+        // Forsiraj rebuild UI-a nakon osvežavanja liste
+        if (mounted) {
+          setState(() {
+            // Osveži filtriranu listu ako postoji filter
+            if (_filterServiceName != null) {
+              _filterAppointmentsByServiceName(_filterServiceName);
+            } else {
+              _filteredAppointments = List.from(_appointments);
+            }
+          });
+        }
+        
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Termin je uspešno ažuriran'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      print('❌ Error updating appointment: $e');
+      String errorMessage = 'Greška pri ažuriranju termina';
+      
+      if (e is ApiError) {
+        errorMessage = e.message;
+        if (e.statusCode != null) {
+          if (e.statusCode == 403) {
+            errorMessage = 'Nemate dozvolu za ažuriranje termina';
+          } else if (e.statusCode == 404) {
+            errorMessage = 'Termin nije pronađen';
+          } else {
+            errorMessage += ' (Status: ${e.statusCode})';
+          }
+        }
+      } else {
+        errorMessage = e.toString();
+      }
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(errorMessage),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 5),
+          ),
+        );
+      }
+    }
+  }
+
   void _showFinishConfirmation(Appointment appointment) {
+    if (!mounted) return;
+    
     final initialCost = appointment.actualCost ?? appointment.estimatedCost;
     final actualCostController = TextEditingController(
       text: initialCost?.toString() ?? '',
@@ -576,6 +1312,8 @@ class _AppointmentScreenState extends State<AppointmentScreen> {
     debugPrint('   paymentDate: ${appointment.paymentDate}');
     debugPrint('   Final isPaid check: $isPaid');
 
+    if (!mounted) return;
+    
     showDialog(
       context: context,
       builder: (BuildContext context) {
@@ -787,7 +1525,10 @@ class _AppointmentScreenState extends State<AppointmentScreen> {
                           final actualCost = isPaid ? null : (double.tryParse(actualCostController.text) ?? 0.0);
                           final notes = notesController.text.trim().isEmpty ? null : notesController.text.trim();
                           
+                          // Zatvori samo dialog za završavanje (ne zatvaraj glavni dialog)
                           Navigator.of(context).pop();
+                          
+                          // Završi appointment (glavni dialog će biti zatvoren u _finishAppointment)
                           await _finishAppointment(appointment.id, actualCost: actualCost, notes: notes);
                         },
                         style: ElevatedButton.styleFrom(
@@ -815,13 +1556,242 @@ class _AppointmentScreenState extends State<AppointmentScreen> {
       print('✅ Appointment finished successfully');
       
       if (mounted) {
+        // PRVO: Direktno ažuriraj appointment u listama sa completed statusom
+        setState(() {
+          // Ažuriraj appointment u glavnoj listi
+          final index = _appointments.indexWhere((a) => a.id == appointmentId);
+          if (index != -1) {
+            print('🔄 Directly updating appointment at index $index to completed status');
+            final oldAppointment = _appointments[index];
+            _appointments[index] = Appointment(
+              id: oldAppointment.id,
+              appointmentNumber: oldAppointment.appointmentNumber,
+              appointmentDate: oldAppointment.appointmentDate,
+              startTime: oldAppointment.startTime,
+              endTime: oldAppointment.endTime,
+              type: oldAppointment.type,
+              status: AppointmentStatus.completed, // ✅ Postavi status na completed
+              petId: oldAppointment.petId,
+              veterinarianId: oldAppointment.veterinarianId,
+              serviceId: oldAppointment.serviceId,
+              reason: oldAppointment.reason,
+              notes: notes ?? oldAppointment.notes,
+              estimatedCost: oldAppointment.estimatedCost,
+              actualCost: actualCost ?? oldAppointment.actualCost,
+              isPaid: oldAppointment.isPaid,
+              paymentDate: oldAppointment.paymentDate,
+              paymentMethod: oldAppointment.paymentMethod,
+              paymentTransactionId: oldAppointment.paymentTransactionId,
+              createdAt: oldAppointment.createdAt,
+              updatedAt: DateTime.now(),
+              petName: oldAppointment.petName,
+              veterinarianName: oldAppointment.veterinarianName,
+              serviceName: oldAppointment.serviceName,
+              ownerName: oldAppointment.ownerName,
+            );
+            print('✅ Updated appointment status to completed in _appointments');
+          }
+          
+          // Ažuriraj appointment u filtriranoj listi
+          final filteredIndex = _filteredAppointments.indexWhere((a) => a.id == appointmentId);
+          if (filteredIndex != -1) {
+            print('🔄 Directly updating appointment at index $filteredIndex in _filteredAppointments to completed');
+            final oldAppointment = _filteredAppointments[filteredIndex];
+            _filteredAppointments[filteredIndex] = Appointment(
+              id: oldAppointment.id,
+              appointmentNumber: oldAppointment.appointmentNumber,
+              appointmentDate: oldAppointment.appointmentDate,
+              startTime: oldAppointment.startTime,
+              endTime: oldAppointment.endTime,
+              type: oldAppointment.type,
+              status: AppointmentStatus.completed, // ✅ Postavi status na completed
+              petId: oldAppointment.petId,
+              veterinarianId: oldAppointment.veterinarianId,
+              serviceId: oldAppointment.serviceId,
+              reason: oldAppointment.reason,
+              notes: notes ?? oldAppointment.notes,
+              estimatedCost: oldAppointment.estimatedCost,
+              actualCost: actualCost ?? oldAppointment.actualCost,
+              isPaid: oldAppointment.isPaid,
+              paymentDate: oldAppointment.paymentDate,
+              paymentMethod: oldAppointment.paymentMethod,
+              paymentTransactionId: oldAppointment.paymentTransactionId,
+              createdAt: oldAppointment.createdAt,
+              updatedAt: DateTime.now(),
+              petName: oldAppointment.petName,
+              veterinarianName: oldAppointment.veterinarianName,
+              serviceName: oldAppointment.serviceName,
+              ownerName: oldAppointment.ownerName,
+            );
+            print('✅ Updated appointment status to completed in _filteredAppointments');
+          }
+          
+          // Ažuriraj selektovani appointment
+          if (_selectedAppointment?.id == appointmentId) {
+            print('🔄 Directly updating _selectedAppointment to completed');
+            final oldAppointment = _selectedAppointment!;
+            _selectedAppointment = Appointment(
+              id: oldAppointment.id,
+              appointmentNumber: oldAppointment.appointmentNumber,
+              appointmentDate: oldAppointment.appointmentDate,
+              startTime: oldAppointment.startTime,
+              endTime: oldAppointment.endTime,
+              type: oldAppointment.type,
+              status: AppointmentStatus.completed, // ✅ Postavi status na completed
+              petId: oldAppointment.petId,
+              veterinarianId: oldAppointment.veterinarianId,
+              serviceId: oldAppointment.serviceId,
+              reason: oldAppointment.reason,
+              notes: notes ?? oldAppointment.notes,
+              estimatedCost: oldAppointment.estimatedCost,
+              actualCost: actualCost ?? oldAppointment.actualCost,
+              isPaid: oldAppointment.isPaid,
+              paymentDate: oldAppointment.paymentDate,
+              paymentMethod: oldAppointment.paymentMethod,
+              paymentTransactionId: oldAppointment.paymentTransactionId,
+              createdAt: oldAppointment.createdAt,
+              updatedAt: DateTime.now(),
+              petName: oldAppointment.petName,
+              veterinarianName: oldAppointment.veterinarianName,
+              serviceName: oldAppointment.serviceName,
+              ownerName: oldAppointment.ownerName,
+            );
+            print('✅ Updated _selectedAppointment status to: ${_selectedAppointment!.status}');
+          }
+        });
+        
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Termin je uspešno završen'),
             backgroundColor: Colors.green,
           ),
         );
-        _loadAppointments();
+        
+        // Osveži dialog sa novim podacima koristeći setDialogState
+        if (mounted && _selectedAppointment?.id == appointmentId && _dialogStateSetter != null) {
+          // Proveri da li je dialog još uvek otvoren
+          final navigator = Navigator.of(context, rootNavigator: true);
+          if (navigator.canPop()) {
+            try {
+              _dialogStateSetter!(() {
+                // Ovo će forsirati rebuild StatefulBuilder-a u dialogu
+                print('🔄 Updating dialog with status: ${_selectedAppointment!.status}');
+              });
+            } catch (e) {
+              // Dialog je već zatvoren, očisti _dialogStateSetter
+              print('⚠️ Dialog already closed, clearing _dialogStateSetter: $e');
+              _dialogStateSetter = null;
+            }
+          } else {
+            // Dialog nije otvoren, očisti _dialogStateSetter
+            _dialogStateSetter = null;
+          }
+        }
+        
+        // ZATIM: Osveži celu listu sa servera da dobijemo najnovije podatke (u pozadini)
+        // Proveri da li je widget još uvek mounted pre poziva _loadAppointments
+        if (mounted) {
+          // Sačuvaj lokalni status pre osvežavanja - proveri i u listama
+          final wasCompleted = _selectedAppointment?.status == AppointmentStatus.completed;
+          final appointmentInList = _appointments.firstWhere(
+            (a) => a.id == appointmentId,
+            orElse: () => _selectedAppointment!,
+          );
+          final wasCompletedInList = appointmentInList.status == AppointmentStatus.completed;
+          print('🔄 Before _loadAppointments: wasCompleted = $wasCompleted, wasCompletedInList = $wasCompletedInList, _selectedAppointment.status = ${_selectedAppointment?.status}, appointmentInList.status = ${appointmentInList.status}');
+          
+          await _loadAppointments();
+          
+          // Ažuriraj selektovani appointment iz nove liste (ako se promenio)
+          if (mounted && _selectedAppointment?.id == appointmentId) {
+            setState(() {
+              final updatedAppointment = _appointments.firstWhere(
+                (a) => a.id == appointmentId,
+                orElse: () => _selectedAppointment!,
+              );
+              
+              print('🔄 After _loadAppointments: updatedAppointment.status = ${updatedAppointment.status}, wasCompleted = $wasCompleted');
+              
+              // Ako je lokalno postavljen na completed, zadrži taj status
+              // (server možda još uvek nije ažurirao status)
+              if ((wasCompleted || wasCompletedInList) && updatedAppointment.status != AppointmentStatus.completed) {
+                // Server još uvek nije ažurirao, zadrži lokalni completed status
+                print('🔄 Server status not updated yet, keeping local completed status for appointment $appointmentId');
+                // Ne menjaj _selectedAppointment - već ima completed status
+                // Ažuriraj appointment u listi da zadrži completed status
+                final index = _appointments.indexWhere((a) => a.id == appointmentId);
+                if (index != -1) {
+                  final oldAppointment = _appointments[index];
+                  _appointments[index] = Appointment(
+                    id: oldAppointment.id,
+                    appointmentNumber: oldAppointment.appointmentNumber,
+                    appointmentDate: oldAppointment.appointmentDate,
+                    startTime: oldAppointment.startTime,
+                    endTime: oldAppointment.endTime,
+                    type: oldAppointment.type,
+                    status: AppointmentStatus.completed, // Zadrži completed status
+                    petId: oldAppointment.petId,
+                    veterinarianId: oldAppointment.veterinarianId,
+                    serviceId: oldAppointment.serviceId,
+                    reason: oldAppointment.reason,
+                    notes: oldAppointment.notes,
+                    estimatedCost: oldAppointment.estimatedCost,
+                    actualCost: oldAppointment.actualCost,
+                    isPaid: oldAppointment.isPaid,
+                    paymentDate: oldAppointment.paymentDate,
+                    paymentMethod: oldAppointment.paymentMethod,
+                    paymentTransactionId: oldAppointment.paymentTransactionId,
+                    createdAt: oldAppointment.createdAt,
+                    updatedAt: oldAppointment.updatedAt,
+                    petName: oldAppointment.petName,
+                    veterinarianName: oldAppointment.veterinarianName,
+                    serviceName: oldAppointment.serviceName,
+                    ownerName: oldAppointment.ownerName,
+                  );
+                }
+                // Ažuriraj i filtriranu listu
+                final filteredIndex = _filteredAppointments.indexWhere((a) => a.id == appointmentId);
+                if (filteredIndex != -1) {
+                  final oldAppointment = _filteredAppointments[filteredIndex];
+                  _filteredAppointments[filteredIndex] = Appointment(
+                    id: oldAppointment.id,
+                    appointmentNumber: oldAppointment.appointmentNumber,
+                    appointmentDate: oldAppointment.appointmentDate,
+                    startTime: oldAppointment.startTime,
+                    endTime: oldAppointment.endTime,
+                    type: oldAppointment.type,
+                    status: AppointmentStatus.completed, // Zadrži completed status
+                    petId: oldAppointment.petId,
+                    veterinarianId: oldAppointment.veterinarianId,
+                    serviceId: oldAppointment.serviceId,
+                    reason: oldAppointment.reason,
+                    notes: oldAppointment.notes,
+                    estimatedCost: oldAppointment.estimatedCost,
+                    actualCost: oldAppointment.actualCost,
+                    isPaid: oldAppointment.isPaid,
+                    paymentDate: oldAppointment.paymentDate,
+                    paymentMethod: oldAppointment.paymentMethod,
+                    paymentTransactionId: oldAppointment.paymentTransactionId,
+                    createdAt: oldAppointment.createdAt,
+                    updatedAt: oldAppointment.updatedAt,
+                    petName: oldAppointment.petName,
+                    veterinarianName: oldAppointment.veterinarianName,
+                    serviceName: oldAppointment.serviceName,
+                    ownerName: oldAppointment.ownerName,
+                  );
+                }
+                print('✅ Keeping _selectedAppointment with completed status');
+              } else if (updatedAppointment.status != _selectedAppointment!.status) {
+                _selectedAppointment = updatedAppointment;
+                print('🔄 Updated _selectedAppointment from server, status: ${updatedAppointment.status}');
+                // Ponovo otvori dialog sa najnovijim podacima sa servera
+                if (mounted) {
+                  _showAppointmentDetails(_selectedAppointment!);
+                }
+              }
+            });
+          }
+        }
       }
     } catch (e) {
       print('❌ Error finishing appointment: $e');
@@ -873,8 +1843,8 @@ class _AppointmentScreenState extends State<AppointmentScreen> {
             backgroundColor: Colors.green,
           ),
         );
-        // Refresh the appointments list
-        _loadAppointments();
+        // Osveži listu termina odmah
+        await _loadAppointments();
       }
     } catch (e) {
       print('❌ Error creating appointment: $e');
@@ -1668,36 +2638,20 @@ class _AppointmentScreenState extends State<AppointmentScreen> {
                                           value: serviceIdController.text.isNotEmpty
                                               ? int.tryParse(serviceIdController.text)
                                               : null,
+                                          menuMaxHeight: 300,
                                           items: filteredServices.map((s) {
                                             final serviceName = s['name']?.toString() ?? 'Usluga';
                                             final servicePrice = s['price']?.toString() ?? '0';
                                             return DropdownMenuItem<int>(
                                               value: s['id'] as int?,
-                                              child: ConstrainedBox(
-                                                constraints: const BoxConstraints(maxHeight: 50),
-                                                child: Column(
-                                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                                  mainAxisSize: MainAxisSize.min,
-                                                  mainAxisAlignment: MainAxisAlignment.center,
-                                                  children: [
-                                                    Text(
-                                                      serviceName,
-                                                      style: const TextStyle(
-                                                        fontWeight: FontWeight.bold,
-                                                        fontSize: 14,
-                                                      ),
-                                                      maxLines: 1,
-                                                      overflow: TextOverflow.ellipsis,
-                                                    ),
-                                                    Text(
-                                                      '$servicePrice KM',
-                                                      style: TextStyle(
-                                                        color: Colors.grey[600],
-                                                        fontSize: 11,
-                                                      ),
-                                                    ),
-                                                  ],
+                                              child: Text(
+                                                serviceName,
+                                                style: const TextStyle(
+                                                  fontWeight: FontWeight.bold,
+                                                  fontSize: 14,
                                                 ),
+                                                maxLines: 1,
+                                                overflow: TextOverflow.ellipsis,
                                               ),
                                             );
                                           }).toList(),
@@ -2049,6 +3003,7 @@ class _AppointmentScreenState extends State<AppointmentScreen> {
                 return SizedBox(
                   height: computedHeight,
                   child: CalendarWidget(
+                    key: ValueKey('calendar_${_filteredAppointments.length}_${_filteredAppointments.fold(0, (sum, a) => sum + a.id + a.status.index + (a.startTime.hashCode) + (a.endTime.hashCode))}'),
                     appointments: _filteredAppointments,
                     userRole: widget.userRole,
                     onDateSelected: _onDateSelected,

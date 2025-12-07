@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import 'package:veterinarska_shared/veterinarska_shared.dart';
 import 'package:veterinarska_shared/utils/validation_helpers.dart';
 import '../auth/login_screen.dart';
+import 'my_reviews_screen.dart';
 
 class MobileProfileScreen extends StatefulWidget {
   const MobileProfileScreen({super.key});
@@ -142,6 +143,20 @@ class _MobileProfileScreenState extends State<MobileProfileScreen> {
                           trailing: const Icon(Icons.arrow_forward_ios),
                           onTap: () {
                             _showEditProfileDialog();
+                          },
+                        ),
+                        const Divider(),
+                        ListTile(
+                          leading: const Icon(Icons.rate_review),
+                          title: const Text('Moje recenzije'),
+                          trailing: const Icon(Icons.arrow_forward_ios),
+                          onTap: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => const MyReviewsScreen(),
+                              ),
+                            );
                           },
                         ),
                         const Divider(),

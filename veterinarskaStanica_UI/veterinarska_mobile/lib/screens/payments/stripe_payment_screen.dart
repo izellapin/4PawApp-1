@@ -763,10 +763,6 @@ class _StripePaymentScreenState extends State<StripePaymentScreen> {
       });
       print('✅ [PAYMENT] UI state updated');
 
-      // Offer rating after successful payment
-      print('💳 [PAYMENT] Step 5: Showing rating dialog...');
-      await _showRateVeterinarianDialog();
-
       print('✅ [PAYMENT] Payment process completed successfully!');
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -791,86 +787,6 @@ class _StripePaymentScreenState extends State<StripePaymentScreen> {
       setState(() => _isLoading = false);
       print('💳 [PAYMENT] Payment process finished (loading state reset)');
     }
-  }
-
-  Future<void> _showRateVeterinarianDialog() async {
-    int selectedRating = 5;
-    await showDialog(
-      context: context,
-      barrierDismissible: true,
-      builder: (ctx) {
-        return StatefulBuilder(
-          builder: (ctx, setStateDialog) {
-            return AlertDialog(
-              title: const Text('Ocijenite veterinara'),
-              content: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: List.generate(5, (index) {
-                      final filled = index < selectedRating;
-                      return IconButton(
-                        icon: Icon(
-                          filled ? Icons.star : Icons.star_border,
-                          color: filled ? const Color(0xFFFFC107) : Colors.grey,
-                        ),
-                        onPressed: () {
-                          setStateDialog(() => selectedRating = index + 1);
-                        },
-                      );
-                    }),
-                  ),
-                  const SizedBox(height: 8),
-                  Text('Ocjena: $selectedRating/5'),
-                ],
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.of(ctx).pop(),
-                  child: const Text('Kasnije'),
-                ),
-                ElevatedButton(
-                  onPressed: () async {
-                    try {
-                      final api = serviceLocator.apiClient;
-                      await api.createVeterinarianReview(
-                        veterinarianId: widget.appointment.veterinarianId,
-                        rating: selectedRating,
-                        petName: widget.appointment.petName,
-                        petSpecies: null,
-                        title: widget.service?['name'],
-                        comment: 'Ocjena iz mobilne aplikacije',
-                      );
-                      if (mounted) {
-                        Navigator.of(ctx).pop();
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text('Hvala na ocjeni!'),
-                            backgroundColor: Colors.green,
-                          ),
-                        );
-                      }
-                    } catch (e) {
-                      if (mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: Text('Greška pri ocjenjivanju: $e'),
-                            backgroundColor: Colors.red,
-                          ),
-                        );
-                      }
-                    }
-                  },
-                  style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF2E7D32)),
-                  child: const Text('Pošalji'),
-                )
-              ],
-            );
-          },
-        );
-      },
-    );
   }
 
   Future<void> initPaymentSheet(Map<String, dynamic> formData) async {

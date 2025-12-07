@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:veterinarska_shared/veterinarska_shared.dart';
 import 'package:veterinarska_shared/utils/validation_helpers.dart';
 
@@ -435,11 +436,15 @@ class _ProfilePageState extends State<ProfilePage> {
                               decoration: InputDecoration(
                                 labelText: 'Telefon',
                                 prefixIcon: const Icon(Icons.phone),
-                                helperText: _isEditing ? 'Format: +387 33 123 456 ili 061 123 456' : null,
+                                helperText: _isEditing ? 'Format: 061 111 222' : null,
                               ),
                               enabled: _isEditing,
                               keyboardType: TextInputType.phone,
-                              validator: _isEditing ? (value) => ValidationHelpers.validatePhone(value, required: false) : null,
+                              inputFormatters: _isEditing ? [
+                                // Format input as user types: 061 111 222
+                                FilteringTextInputFormatter.allow(RegExp(r'[0-9\s]')),
+                              ] : null,
+                              validator: _isEditing ? (value) => ValidationHelpers.validatePhoneFormat(value, required: false) : null,
                             ),
                             const SizedBox(height: 16),
                             TextFormField(
