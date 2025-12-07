@@ -39,11 +39,13 @@ namespace eVeterinarskaStanicaModel
         public int? VeterinarianId { get; set; } // Optional - može biti review za Veterinarian
         public int UserId { get; set; } // Korisnik koji je ostavio review
         public int? OrderId { get; set; }
+        public int? AppointmentId { get; set; } // Optional - vezano za specifičan termin
 
         // Navigation Properties
         public virtual Service? Service { get; set; }
         public virtual User? Veterinarian { get; set; } // Veterinar koji se ocjenjuje
         public virtual User User { get; set; } // Korisnik koji je ostavio review
         public virtual Order? Order { get; set; }
+        public virtual Appointment? Appointment { get; set; } // Termin za koji je recenzija
     }
 }

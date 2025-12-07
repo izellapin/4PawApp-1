@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -34,7 +35,17 @@ class ApiClient {
     dio.interceptors.add(LogInterceptor(
       requestBody: true,
       responseBody: true,
-      logPrint: (obj) {}, // Disable API logs
+      requestHeader: true,
+      responseHeader: false,
+      logPrint: (obj) {
+        // Enable logs for debugging update appointment
+        if (kDebugMode) {
+          final str = obj.toString();
+          if (str.contains('appointments') && (str.contains('PUT') || str.contains('update'))) {
+            print('🔍 [DIO INTERCEPTOR] $str');
+          }
+        }
+      },
     ));
     
     dio.interceptors.add(InterceptorsWrapper(
@@ -517,17 +528,17 @@ class ApiClient {
 
   Future<void> deletePet(int id) async {
     try {
-      // Prvo pokušaj sa /pets/{id} (za admin/veterinar)
+      // Prvo pokušaj sa /pets/my/{id} (za pet owners - najčešći slučaj)
       try {
-        final response = await dio.delete('/pets/$id');
-        print('✅ Pet deleted successfully via /pets/$id');
+        final response = await dio.delete('/pets/my/$id');
+        print('✅ Pet deleted successfully via /pets/my/$id');
         return;
       } on DioException catch (e) {
-        // Ako je 403 ili 404, pokušaj sa /pets/my/{id} (za pet owners)
+        // Ako je 403 ili 404, pokušaj sa /pets/{id} (za admin/veterinar)
         if (e.response?.statusCode == 403 || e.response?.statusCode == 404) {
-          print('⚠️ Got ${e.response?.statusCode} from /pets/$id, trying /pets/my/$id');
-          final response = await dio.delete('/pets/my/$id');
-          print('✅ Pet deleted successfully via /pets/my/$id');
+          print('⚠️ Got ${e.response?.statusCode} from /pets/my/$id, trying /pets/$id');
+          final response = await dio.delete('/pets/$id');
+          print('✅ Pet deleted successfully via /pets/$id');
           return;
         }
         // Ako nije 403/404, re-throw grešku
@@ -595,6 +606,87 @@ class ApiClient {
     }
   }
 
+  Future<Appointment> updateAppointment(int id, Map<String, dynamic> data) async {
+    try {
+      // Debug: Log the data being sent
+      print('📤 [API CLIENT] updateAppointment - ID: $id');
+      print('📤 [API CLIENT] Data being sent: $data');
+      print('📤 [API CLIENT] startTime value: ${data['startTime']} (type: ${data['startTime']?.runtimeType})');
+      print('📤 [API CLIENT] endTime value: ${data['endTime']} (type: ${data['endTime']?.runtimeType})');
+      
+      // Osiguraj da su vremena stringovi sa tačno 2 cifre (HH:mm format)
+      // Backend očekuje camelCase zbog JsonNamingPolicy.CamelCase u Program.cs
+      final cleanData = Map<String, dynamic>.from(data);
+      
+      if (cleanData['startTime'] != null) {
+        final timeStr = cleanData['startTime'].toString();
+        // Proveri da li je format ispravan (HH:mm)
+        if (RegExp(r'^\d{1,2}:\d{1,2}$').hasMatch(timeStr)) {
+          final parts = timeStr.split(':');
+          final hour = parts[0].padLeft(2, '0');
+          final minute = parts[1].padLeft(2, '0');
+          cleanData['startTime'] = '$hour:$minute';
+        } else {
+          cleanData['startTime'] = timeStr;
+        }
+      }
+      
+      if (cleanData['endTime'] != null) {
+        final timeStr = cleanData['endTime'].toString();
+        // Proveri da li je format ispravan (HH:mm)
+        if (RegExp(r'^\d{1,2}:\d{1,2}$').hasMatch(timeStr)) {
+          final parts = timeStr.split(':');
+          final hour = parts[0].padLeft(2, '0');
+          final minute = parts[1].padLeft(2, '0');
+          cleanData['endTime'] = '$hour:$minute';
+        } else {
+          cleanData['endTime'] = timeStr;
+        }
+      }
+      
+      print('📤 [API CLIENT] Cleaned data (camelCase): $cleanData');
+      print('📤 [API CLIENT] startTime after cleaning: "${cleanData['startTime']}" (type: ${cleanData['startTime']?.runtimeType}, length: ${cleanData['startTime']?.toString().length})');
+      print('📤 [API CLIENT] endTime after cleaning: "${cleanData['endTime']}" (type: ${cleanData['endTime']?.runtimeType}, length: ${cleanData['endTime']?.toString().length})');
+      
+      // Convert to JSON string to see exact format
+      try {
+        final jsonString = jsonEncode(cleanData);
+        print('📤 [API CLIENT] JSON string being sent: $jsonString');
+        print('📤 [API CLIENT] JSON contains startTime: ${jsonString.contains('startTime')}');
+        print('📤 [API CLIENT] JSON contains StartTime: ${jsonString.contains('StartTime')}');
+        print('📤 [API CLIENT] JSON startTime value in JSON: ${RegExp(r'"startTime"\s*:\s*"([^"]+)"').firstMatch(jsonString)?.group(1)}');
+      } catch (e) {
+        print('❌ [API CLIENT] Error encoding JSON: $e');
+      }
+      
+      final response = await dio.put('/appointments/$id', data: cleanData);
+      
+      // Debug: Log the response
+      print('📥 [API CLIENT] Response status: ${response.statusCode}');
+      print('📥 [API CLIENT] Response data: ${response.data}');
+      
+      if (response.statusCode != 200) {
+        String message = 'Greška pri ažuriranju termina';
+        if (response.data != null) {
+          if (response.data is Map<String, dynamic>) {
+            message = response.data['message'] ?? message;
+          } else if (response.data is String) {
+            message = response.data;
+          }
+        }
+        throw ApiError(
+          message: message,
+          statusCode: response.statusCode,
+        );
+      }
+      return Appointment.fromJson(response.data);
+    } on DioException catch (e) {
+      print('❌ [API CLIENT] DioException: ${e.message}');
+      print('❌ [API CLIENT] Response: ${e.response?.data}');
+      throw _handleError(e);
+    }
+  }
+
   Future<void> completeAppointment(int id, {double? actualCost, String? notes}) async {
     try {
       await dio.patch('/appointments/$id/complete', data: {
@@ -609,6 +701,19 @@ class ApiClient {
   Future<List<Pet>> getUserPets(int userId) async {
     try {
       final response = await dio.get('/pets/owner/$userId');
+      final data = response.data as List;
+      
+      final limitedData = data.take(20).toList();
+      
+      return limitedData.map((json) => Pet.fromJson(json)).toList();
+    } on DioException catch (e) {
+      throw _handleError(e);
+    }
+  }
+
+  Future<List<Pet>> getMyPets() async {
+    try {
+      final response = await dio.get('/pets/my');
       final data = response.data as List;
       
       final limitedData = data.take(20).toList();
@@ -704,6 +809,7 @@ class ApiClient {
     String? comment,
     String? petName,
     String? petSpecies,
+    int? appointmentId,
   }) async {
     try {
       await dio.post('/reviews/veterinarian/$veterinarianId', data: {
@@ -712,6 +818,7 @@ class ApiClient {
         'comment': comment,
         'petName': petName,
         'petSpecies': petSpecies,
+        'appointmentId': appointmentId,
       });
     } on DioException catch (e) {
       throw _handleError(e);
@@ -720,15 +827,26 @@ class ApiClient {
 
   Future<List<Map<String, dynamic>>> getAllReviews() async {
     try {
+      print('🔍 [API CLIENT] Getting all reviews...');
+      print('Pozivam API: /reviews/all');
       final response = await dio.get('/reviews/all');
+      print('Response status: ${response.statusCode}');
+      print('Response body: ${response.data}');
       final data = response.data;
       if (data is List) {
-        return List<Map<String, dynamic>>.from(data);
+        final result = List<Map<String, dynamic>>.from(data);
+        print('✅ [API CLIENT] Parsed ${result.length} reviews from List');
+        return result;
       } else if (data is Map && data['\$values'] is List) {
-        return List<Map<String, dynamic>>.from(data['\$values']);
+        final result = List<Map<String, dynamic>>.from(data['\$values']);
+        print('✅ [API CLIENT] Parsed ${result.length} reviews from Map[\$values]');
+        return result;
       }
+      print('⚠️ [API CLIENT] Unexpected data format: ${data.runtimeType}');
       return [];
     } on DioException catch (e) {
+      print('❌ [API CLIENT] DioException getting reviews: ${e.message}');
+      print('❌ [API CLIENT] Response: ${e.response?.data}');
       throw _handleError(e);
     }
   }
@@ -737,6 +855,77 @@ class ApiClient {
     try {
       await dio.delete('/reviews/$id');
     } on DioException catch (e) {
+      throw _handleError(e);
+    }
+  }
+
+  Future<void> deleteMyReview(int id) async {
+    try {
+      print('🗑️ [API CLIENT] Deleting my review with ID: $id');
+      print('🗑️ [API CLIENT] Full URL: ${dio.options.baseUrl}/reviews/my/$id');
+      print('🗑️ [API CLIENT] Request method: DELETE');
+      
+      final response = await dio.delete('/reviews/my/$id');
+      
+      print('🗑️ [API CLIENT] Response status: ${response.statusCode}');
+      print('🗑️ [API CLIENT] Response data: ${response.data}');
+      
+      if (response.statusCode == 204 || response.statusCode == 200) {
+        print('✅ [API CLIENT] Review deleted successfully');
+      } else {
+        print('⚠️ [API CLIENT] Unexpected status code: ${response.statusCode}');
+        throw Exception('Unexpected status code: ${response.statusCode}');
+      }
+    } on DioException catch (e) {
+      print('❌ [API CLIENT] DioException deleting my review: ${e.message}');
+      print('❌ [API CLIENT] Status code: ${e.response?.statusCode}');
+      print('❌ [API CLIENT] Response data: ${e.response?.data}');
+      print('❌ [API CLIENT] Request path: ${e.requestOptions.path}');
+      print('❌ [API CLIENT] Request method: ${e.requestOptions.method}');
+      print('❌ [API CLIENT] Full error: $e');
+      throw _handleError(e);
+    } catch (e) {
+      print('❌ [API CLIENT] General error deleting my review: $e');
+      rethrow;
+    }
+  }
+
+  Future<bool> hasReviewForVeterinarian(int veterinarianId) async {
+    try {
+      final response = await dio.get('/reviews/veterinarian/$veterinarianId/has-review');
+      if (response.statusCode == 200) {
+        return response.data as bool;
+      }
+      return false;
+    } on DioException catch (e) {
+      // Ako je 401 ili 403, korisnik nije ulogovan ili nema prava
+      if (e.response?.statusCode == 401 || e.response?.statusCode == 403) {
+        return false;
+      }
+      throw _handleError(e);
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> getMyReviews() async {
+    try {
+      print('🔍 [API CLIENT] Getting my reviews...');
+      final response = await dio.get('/reviews/my-reviews');
+      print('🔍 [API CLIENT] Response status: ${response.statusCode}');
+      print('🔍 [API CLIENT] Response data type: ${response.data.runtimeType}');
+      final data = response.data;
+      if (data is List) {
+        print('✅ [API CLIENT] Returning ${data.length} reviews');
+        return List<Map<String, dynamic>>.from(data);
+      } else if (data is Map && data['\$values'] is List) {
+        print('✅ [API CLIENT] Returning ${data['\$values'].length} reviews from \$values');
+        return List<Map<String, dynamic>>.from(data['\$values']);
+      }
+      print('⚠️ [API CLIENT] No reviews found or unexpected data format');
+      return [];
+    } on DioException catch (e) {
+      print('❌ [API CLIENT] Error getting my reviews: ${e.message}');
+      print('❌ [API CLIENT] Status code: ${e.response?.statusCode}');
+      print('❌ [API CLIENT] Response data: ${e.response?.data}');
       throw _handleError(e);
     }
   }

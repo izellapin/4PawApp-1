@@ -436,6 +436,7 @@ namespace eVeterinarskaStanicaServices.Database
                 entity.Property(e => e.VeterinarianId).IsRequired(false);
                 entity.Property(e => e.ServiceId).IsRequired(false);
                 entity.Property(e => e.OrderId).IsRequired(false);
+                entity.Property(e => e.AppointmentId).IsRequired(false);
 
                 // Configure relationship: Review -> User (koji je ostavio review)
                 entity.HasOne(r => r.User)
@@ -461,10 +462,17 @@ namespace eVeterinarskaStanicaServices.Database
                     .HasForeignKey(r => r.OrderId)
                     .OnDelete(DeleteBehavior.Restrict);
 
+                // Configure relationship: Review -> Appointment (opcionalno)
+                entity.HasOne(r => r.Appointment)
+                    .WithMany()
+                    .HasForeignKey(r => r.AppointmentId)
+                    .OnDelete(DeleteBehavior.Restrict);
+
                 // Indexes for faster lookups
                 entity.HasIndex(e => e.VeterinarianId);
                 entity.HasIndex(e => e.UserId);
                 entity.HasIndex(e => e.ServiceId);
+                entity.HasIndex(e => e.AppointmentId);
                 entity.HasIndex(e => e.IsApproved);
             });
         }
